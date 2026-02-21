@@ -13,7 +13,7 @@ import time
 import subprocess
 import requests
 
-from olith_shared import log_warn, log_error, log_info
+from olith_shared import log_warn, log_error, log_info, retry_on_failure
 from olith_memory_init import OLLAMA_URL, PYROLITH_URL
 
 # ============================================================================
@@ -41,19 +41,22 @@ def chat_with_ollama(
     num_ctx: int = 4096,
 ) -> str:
     """Appel direct a l'API Ollama (non-streaming). Retourne le contenu de la reponse."""
-    response = _session.post(
-        f"{OLLAMA_URL}/api/chat",
-        json={
-            "model": model,
-            "messages": messages,
-            "stream": False,
-            "keep_alive": "5m",
-            "options": {"num_ctx": num_ctx},
-        },
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    return response.json()["message"]["content"]
+    def _call():
+        response = _session.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "keep_alive": "5m",
+                "options": {"num_ctx": num_ctx},
+            },
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()["message"]["content"]
+
+    return retry_on_failure(_call, max_retries=2, base_delay=1.0)
 
 
 def chat_with_ollama_stream(
@@ -63,19 +66,23 @@ def chat_with_ollama_stream(
     num_ctx: int = 4096,
 ):
     """Appel streaming a l'API Ollama. Yield chaque token au fur et a mesure."""
-    response = _session.post(
-        f"{OLLAMA_URL}/api/chat",
-        json={
-            "model": model,
-            "messages": messages,
-            "stream": True,
-            "keep_alive": "5m",
-            "options": {"num_ctx": num_ctx},
-        },
-        timeout=timeout,
-        stream=True,
-    )
-    response.raise_for_status()
+    def _connect():
+        resp = _session.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": model,
+                "messages": messages,
+                "stream": True,
+                "keep_alive": "5m",
+                "options": {"num_ctx": num_ctx},
+            },
+            timeout=timeout,
+            stream=True,
+        )
+        resp.raise_for_status()
+        return resp
+
+    response = retry_on_failure(_connect, max_retries=2, base_delay=1.0)
     for line in response.iter_lines():
         if line:
             data = json.loads(line)
@@ -87,6 +94,7 @@ def chat_with_ollama_stream(
 
 
 def chat_docker_pyrolith(
+    model: str,
     messages: list[dict],
     timeout: int = 300,
     num_ctx: int = 8192,
@@ -95,7 +103,7 @@ def chat_docker_pyrolith(
     response = _session.post(
         f"{PYROLITH_URL}/api/chat",
         json={
-            "model": "deephat/DeepHat-V1-7B:latest",
+            "model": model,
             "messages": messages,
             "stream": False,
             "options": {"num_ctx": num_ctx},
@@ -107,6 +115,7 @@ def chat_docker_pyrolith(
 
 
 def chat_docker_pyrolith_stream(
+    model: str,
     messages: list[dict],
     timeout: int = 300,
     emit=None,
@@ -116,7 +125,7 @@ def chat_docker_pyrolith_stream(
     response = _session.post(
         f"{PYROLITH_URL}/api/chat",
         json={
-            "model": "deephat/DeepHat-V1-7B:latest",
+            "model": model,
             "messages": messages,
             "stream": True,
             "options": {"num_ctx": num_ctx},

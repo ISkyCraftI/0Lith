@@ -68,6 +68,49 @@ def strip_think_blocks(text: str) -> str:
 
 
 # ============================================================================
+# MEM0 RESULT HELPERS
+# ============================================================================
+
+def extract_memories(results) -> list[dict]:
+    """Normalise les résultats Mem0 (list ou dict avec 'results' key) en liste."""
+    if isinstance(results, dict):
+        return results.get("results", [])
+    if isinstance(results, list):
+        return results
+    return []
+
+
+def memory_text(mem) -> str:
+    """Extrait le texte d'un résultat mémoire Mem0."""
+    if isinstance(mem, dict):
+        return mem.get("memory", mem.get("text", ""))
+    return str(mem)
+
+
+# ============================================================================
+# RETRY HELPER
+# ============================================================================
+
+def retry_on_failure(fn, max_retries=3, base_delay=1.0, exceptions=None):
+    """Retry avec exponential backoff. Retourne le résultat ou relève la dernière exception."""
+    import time
+    import requests as _req
+    if exceptions is None:
+        exceptions = (_req.exceptions.ConnectionError, _req.exceptions.Timeout)
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except exceptions as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt)
+                log_warn("retry", f"Attempt {attempt+1} failed: {e}. Retrying in {delay}s...")
+                time.sleep(delay)
+    raise last_error
+
+
+# ============================================================================
 # SHARED CONSTANTS
 # ============================================================================
 

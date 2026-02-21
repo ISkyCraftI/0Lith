@@ -36,6 +36,7 @@ sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
 # Shared utilities (also applies Mem0 /no_think patch on import)
 from olith_shared import (
     strip_think_blocks, log_warn, log_error, log_info,
+    extract_memories, memory_text,
     WATCHED_EXTENSIONS as _SHARED_WATCHED,
     IGNORED_DIRS as _SHARED_IGNORED,
 )
@@ -385,19 +386,14 @@ class OlithWatcher:
                 user_id="hodolith",
                 limit=3,
             )
-            if isinstance(results, dict):
-                memories = results.get("results", [])
-            elif isinstance(results, list):
-                memories = results
-            else:
-                memories = []
+            memories = extract_memories(results)
 
             if not memories:
                 return
 
             context_texts = []
             for mem in memories:
-                text = mem.get("memory", mem.get("text", "")) if isinstance(mem, dict) else str(mem)
+                text = memory_text(mem)
                 if text:
                     context_texts.append(text)
 

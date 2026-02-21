@@ -215,9 +215,18 @@ export async function cancelMessage(): Promise<void> {
   streaming = false;
   activeAgent = null;
   addMessage({ type: "system", content: "Request cancelled." });
-  // Kill and restart Python process (also closes any active HTTP streams)
-  await backend.stop();
-  await backend.start();
+
+  // Graceful cancel via IPC — preserves Python process and daemon threads
+  try {
+    await backend.send(
+      { id: crypto.randomUUID(), command: "cancel" } as IPCRequest,
+      3000,
+    );
+  } catch {
+    // Fallback: kill and restart if IPC cancel fails (timeout, process hung)
+    await backend.stop();
+    await backend.start();
+  }
 }
 
 export function addSystemMessage(text: string): void {

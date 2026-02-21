@@ -31,7 +31,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
 
 # Import shared (also applies Mem0 patch on import)
-from olith_shared import log_warn, log_error, log_info
+from olith_shared import log_warn, log_error, log_info, extract_memories, memory_text
 
 from olith_memory_init import (
     AGENTS,
@@ -68,6 +68,8 @@ from olith_agents import (
     conversation_history,
 )
 
+from olith_history import ChatHistory
+
 import requests
 
 
@@ -83,6 +85,9 @@ class OlithBackend:
         self.project_root: str | None = None
         self._pending_threads: list[threading.Thread] = []
         self._threads_lock = threading.Lock()
+        self._chat_lock = threading.Lock()
+        self._cancel_event = threading.Event()
+        self.history = ChatHistory()
 
     def _track_thread(self, thread: threading.Thread):
         """Track a background thread for cleanup on shutdown."""
@@ -153,6 +158,10 @@ class OlithBackend:
             "feedback":         self.cmd_feedback,
             "system_info":      self.cmd_system_info,
             "clear_memories":   self.cmd_clear_memories,
+            "cancel":           self.cmd_cancel,
+            "list_sessions":    self.cmd_list_sessions,
+            "load_session":     self.cmd_load_session,
+            "new_session":      self.cmd_new_session,
         }
         return handlers.get(command)
 
@@ -219,7 +228,21 @@ class OlithBackend:
     # ── chat ────────────────────────────────────────────────────────────
 
     def cmd_chat(self, request: dict, emit=None) -> dict:
-        """Chat avec routage + memoire + streaming + boucle agent."""
+        """Chat avec routage + memoire + streaming + boucle agent.
+        Sérialisé via _chat_lock pour éviter les conflits de conversation_history et VRAM."""
+        if not self._chat_lock.acquire(blocking=False):
+            log_info("chat", "Waiting for previous chat to finish...")
+            self._chat_lock.acquire()
+
+        self._cancel_event.clear()
+
+        try:
+            return self._cmd_chat_inner(request, emit)
+        finally:
+            self._chat_lock.release()
+
+    def _cmd_chat_inner(self, request: dict, emit=None) -> dict:
+        """Logique interne de cmd_chat (appelée sous _chat_lock)."""
         message = request.get("message", "").strip()
         if not message:
             return {"message": "Empty message", "status": "error"}
@@ -248,6 +271,7 @@ class OlithBackend:
             project_root=self.project_root,
             emit=emit,
             route_reason=route_reason,
+            cancel_event=self._cancel_event,
         )
 
         # Track the memory storage thread
@@ -255,7 +279,49 @@ class OlithBackend:
         if bg_thread:
             self._track_thread(bg_thread)
 
+        # Persist user message + agent response
+        if not result.get("cancelled"):
+            sid = self.history.current_session or self.history.new_session()
+            self.history.save_message(sid, {"type": "user", "content": message})
+            self.history.save_message(sid, {
+                "type": "agent",
+                "content": result.get("response", ""),
+                "agent_id": result.get("agent_id"),
+                "agent_name": result.get("agent_name"),
+            })
+            result["session_id"] = sid
+
         return result
+
+    def cmd_cancel(self, request: dict) -> dict:
+        """Signale l'annulation du chat en cours via _cancel_event."""
+        self._cancel_event.set()
+        log_info("chat", "Cancel requested")
+        return {"message": "Cancelled"}
+
+    # ── chat history ─────────────────────────────────────────────────────
+    # TODO frontend: connecter list_sessions, load_session, new_session aux composants Svelte
+
+    def cmd_list_sessions(self, request: dict) -> dict:
+        """Retourne la liste des sessions de chat persistées."""
+        return {"sessions": self.history.list_sessions()}
+
+    def cmd_load_session(self, request: dict) -> dict:
+        """Charge les messages d'une session."""
+        session_id = request.get("session_id", "")
+        if not session_id:
+            return {"message": "Missing session_id", "status": "error"}
+        messages = self.history.load_session(session_id)
+        if not messages:
+            return {"messages": [], "message": f"Session '{session_id}' not found or empty"}
+        self.history._current_session = session_id
+        return {"session_id": session_id, "messages": messages}
+
+    def cmd_new_session(self, request: dict) -> dict:
+        """Force la création d'une nouvelle session de chat."""
+        sid = self.history.new_session()
+        conversation_history.clear()
+        return {"session_id": sid, "message": "New session started"}
 
     # ── gaming_mode ──────────────────────────────────────────────────────
 
@@ -297,23 +363,15 @@ class OlithBackend:
             log_warn("search", f"Mem0 search failed: {e}")
             return {"results": [], "message": f"Search failed: {e}"}
 
-        if isinstance(results, dict):
-            memories_list = results.get("results", [])
-        elif isinstance(results, list):
-            memories_list = results
-        else:
-            memories_list = []
+        memories_list = extract_memories(results)
 
         formatted = []
         for mem in memories_list:
+            entry = {"text": memory_text(mem) or str(mem)}
             if isinstance(mem, dict):
-                formatted.append({
-                    "text": mem.get("memory", mem.get("text", str(mem))),
-                    "score": mem.get("score"),
-                    "metadata": mem.get("metadata"),
-                })
-            else:
-                formatted.append({"text": str(mem)})
+                entry["score"] = mem.get("score")
+                entry["metadata"] = mem.get("metadata")
+            formatted.append(entry)
 
         return {"results": formatted, "agent_id": agent_id, "query": query}
 
@@ -457,11 +515,16 @@ class OlithBackend:
 
         config = copy.deepcopy(MEM0_CONFIG)
 
+        from olith_shared import retry_on_failure
         try:
             from mem0 import Memory
             if not use_graph:
                 config.pop("graph_store", None)
-            self.memory = Memory.from_config(config_dict=config)
+
+            def _init():
+                return Memory.from_config(config_dict=config)
+
+            self.memory = retry_on_failure(_init, max_retries=2, base_delay=2.0, exceptions=(Exception,))
             log_info("memory", "Mem0 initialized successfully")
         except Exception as e:
             log_error("memory", f"Mem0 init failed: {e}")

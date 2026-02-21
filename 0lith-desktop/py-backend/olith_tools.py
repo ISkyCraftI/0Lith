@@ -32,18 +32,54 @@ LEVEL_2_ACTIONS = {"write_file", "edit_file"}
 # PATH VALIDATION (Sandbox)
 # ============================================================================
 
-def validate_path(path: str, project_root: str | None) -> Path:
-    """Resout un chemin. Les chemins absolus sont acceptes directement.
-    Les chemins relatifs sont resolus par rapport au project_root."""
+def validate_path(path: str, project_root: str | None, *, write: bool = False) -> Path:
+    """Resout un chemin et vérifie qu'il reste dans le sandbox autorisé.
+
+    Whitelist:
+      - Lecture : project_root (si défini) + Path.home() et sous-répertoires
+      - Écriture (write=True) : project_root uniquement
+
+    Lève ValueError si le chemin résolu sort du sandbox.
+    """
     p = Path(path)
 
     if p.is_absolute():
-        return p.resolve()
+        resolved = p.resolve()
+    else:
+        if not project_root:
+            raise ValueError("Chemin relatif sans projet ouvert. Utilise un chemin absolu ou set_project_root d'abord.")
+        resolved = (Path(project_root).resolve() / path).resolve()
 
-    if not project_root:
-        raise ValueError("Chemin relatif sans projet ouvert. Utilise un chemin absolu ou set_project_root d'abord.")
+    # --- Sandbox enforcement ---
+    home = Path.home().resolve()
+    root = Path(project_root).resolve() if project_root else None
 
-    return (Path(project_root).resolve() / path).resolve()
+    if write:
+        # Écriture : uniquement dans project_root
+        if root is None:
+            raise ValueError(f"Écriture interdite sans projet ouvert: {resolved}")
+        if not _is_within(resolved, root):
+            raise ValueError(f"Chemin hors du sandbox autorisé: {resolved}")
+    else:
+        # Lecture : project_root OU home
+        allowed = False
+        if root and _is_within(resolved, root):
+            allowed = True
+        if _is_within(resolved, home):
+            allowed = True
+        if not allowed:
+            raise ValueError(f"Chemin hors du sandbox autorisé: {resolved}")
+
+    return resolved
+
+
+def _is_within(child: Path, parent: Path) -> bool:
+    """Vérifie que child est égal ou sous-répertoire de parent (post-resolve)."""
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
 
 
 # ============================================================================
@@ -198,7 +234,7 @@ def tool_search_files(pattern: str, project_root: str | None, path: str = ".", g
 
 def tool_write_file(path: str, content: str, project_root: str | None) -> dict:
     """Ecrit un fichier complet (cree les repertoires parents si necessaire)."""
-    target = validate_path(path, project_root)
+    target = validate_path(path, project_root, write=True)
     target.parent.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -220,7 +256,7 @@ def tool_write_file(path: str, content: str, project_root: str | None) -> dict:
 
 def tool_edit_file(path: str, old_string: str, new_string: str, project_root: str | None) -> dict:
     """Remplace old_string par new_string dans un fichier (exact match unique)."""
-    target = validate_path(path, project_root)
+    target = validate_path(path, project_root, write=True)
 
     if not target.is_file():
         return {"error": f"Fichier introuvable: {path}"}
@@ -256,50 +292,44 @@ def tool_edit_file(path: str, old_string: str, new_string: str, project_root: st
 
 def tool_system_info() -> dict:
     """Retourne les infos systeme : OS, processus actifs, memoire, GPU."""
+    import platform
     import subprocess
+    import psutil
+
     info = {}
 
-    # OS info
+    # OS info + RAM via psutil
     try:
-        result = subprocess.run(
-            ["wmic", "os", "get", "Caption,Version,TotalVisibleMemorySize", "/format:csv"],
-            capture_output=True, text=True, timeout=5,
-        )
-        for line in result.stdout.strip().splitlines():
-            parts = line.strip().split(",")
-            if len(parts) >= 4 and parts[1] and parts[1] != "Caption":
-                info["os"] = parts[1].strip()
-                info["os_version"] = parts[2].strip()
-                total_kb = int(parts[3].strip())
-                info["total_ram_gb"] = round(total_kb / 1024 / 1024, 1)
+        info["os"] = f"{platform.system()} {platform.release()}"
+        info["os_version"] = platform.version()
+        vm = psutil.virtual_memory()
+        info["total_ram_gb"] = round(vm.total / (1024 ** 3), 1)
+        info["available_ram_gb"] = round(vm.available / (1024 ** 3), 1)
+        info["ram_percent"] = vm.percent
     except Exception:
-        info["os"] = "Windows (details unavailable)"
+        info["os"] = "Unknown"
 
     # Running processes — top 30 by memory
     try:
-        result = subprocess.run(
-            ["tasklist", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, timeout=10,
-        )
         processes = []
-        for line in result.stdout.strip().splitlines():
-            # Format: "name","PID","Session","Session#","Mem Usage"
-            parts = line.strip().strip('"').split('","')
-            if len(parts) >= 5:
-                name = parts[0]
-                pid = parts[1]
-                mem_str = parts[4].replace('"', '').replace('\xa0', '').replace(' ', '')
-                mem_str = ''.join(c for c in mem_str if c.isdigit())
-                mem_kb = int(mem_str) if mem_str else 0
-                processes.append({"name": name, "pid": int(pid), "mem_mb": round(mem_kb / 1024, 1)})
-        # Sort by memory, top 30
+        for proc in psutil.process_iter(["pid", "name", "memory_info"]):
+            try:
+                mem = proc.info["memory_info"]
+                if mem:
+                    processes.append({
+                        "name": proc.info["name"],
+                        "pid": proc.info["pid"],
+                        "mem_mb": round(mem.rss / (1024 ** 2), 1),
+                    })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
         processes.sort(key=lambda p: p["mem_mb"], reverse=True)
         info["processes"] = processes[:30]
         info["total_processes"] = len(processes)
     except Exception as e:
         info["processes_error"] = str(e)
 
-    # GPU info via nvidia-smi
+    # GPU info via nvidia-smi (cross-platform)
     try:
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,utilization.gpu",
@@ -400,3 +430,136 @@ def parse_tool_calls(response_text: str) -> tuple[str, list[dict]]:
     clean_text = re.sub(r'\n{3,}', '\n\n', clean_text).strip()
 
     return clean_text, tool_calls
+
+
+# ============================================================================
+# INLINE TESTS — python olith_tools.py
+# ============================================================================
+
+if __name__ == "__main__":
+    import tempfile, shutil
+
+    passed = 0
+    failed = 0
+
+    def _test(name, fn):
+        global passed, failed
+        try:
+            fn()
+            print(f"  OK  {name}")
+            passed += 1
+        except AssertionError as e:
+            print(f"  FAIL  {name}: {e}")
+            failed += 1
+        except Exception as e:
+            print(f"  FAIL  {name}: {type(e).__name__}: {e}")
+            failed += 1
+
+    # Setup: temp dirs simulating project_root inside home
+    home = Path.home().resolve()
+    tmpdir = Path(tempfile.mkdtemp(prefix="olith_test_", dir=str(home)))
+    project = tmpdir / "my_project"
+    project.mkdir()
+    (project / "hello.txt").write_text("hello", encoding="utf-8")
+
+    print(f"\n=== validate_path sandbox tests ===")
+    print(f"  home={home}")
+    print(f"  project={project}\n")
+
+    # 1. Chemin relatif dans project_root → OK (lecture + écriture)
+    _test("relative path read", lambda: (
+        validate_path("hello.txt", str(project), write=False)
+    ))
+    _test("relative path write", lambda: (
+        validate_path("hello.txt", str(project), write=True)
+    ))
+
+    # 2. Chemin absolu dans home → OK en lecture
+    home_file = tmpdir / "outside_project.txt"
+    home_file.write_text("test", encoding="utf-8")
+    _test("abs home read OK", lambda: (
+        validate_path(str(home_file), str(project), write=False)
+    ))
+
+    # 3. Chemin absolu dans home mais hors project_root → bloqué en écriture
+    def _test_home_write_blocked():
+        try:
+            validate_path(str(home_file), str(project), write=True)
+            raise AssertionError("Should have raised ValueError")
+        except ValueError as e:
+            assert "hors du sandbox" in str(e), f"Wrong error: {e}"
+    _test("abs home write BLOCKED", _test_home_write_blocked)
+
+    # 4. Chemin absolu hors home (C:\Windows ou /usr) → ValueError
+    if os.name == "nt":
+        outside = r"C:\Windows\System32\drivers\etc\hosts"
+    else:
+        outside = "/etc/passwd"
+
+    def _test_outside_read():
+        try:
+            validate_path(outside, str(project), write=False)
+            raise AssertionError("Should have raised ValueError")
+        except ValueError as e:
+            assert "hors du sandbox" in str(e), f"Wrong error: {e}"
+    _test("abs outside read BLOCKED", _test_outside_read)
+
+    def _test_outside_write():
+        try:
+            validate_path(outside, str(project), write=True)
+            raise AssertionError("Should have raised ValueError")
+        except ValueError as e:
+            assert "hors du sandbox" in str(e), f"Wrong error: {e}"
+    _test("abs outside write BLOCKED", _test_outside_write)
+
+    # 5. Symlink qui sort du sandbox → ValueError
+    if os.name == "nt":
+        # Sur Windows, la creation de symlink nécessite des privilèges.
+        # On tente, et on skip si ça échoue.
+        symlink_target = Path(outside)
+        symlink_path = project / "sneaky_link.txt"
+        try:
+            symlink_path.symlink_to(symlink_target)
+            def _test_symlink_escape():
+                try:
+                    validate_path(str(symlink_path), str(project), write=False)
+                    raise AssertionError("Should have raised ValueError")
+                except ValueError as e:
+                    assert "hors du sandbox" in str(e), f"Wrong error: {e}"
+            _test("symlink escape BLOCKED", _test_symlink_escape)
+        except OSError:
+            print("  SKIP  symlink escape BLOCKED (symlink creation requires admin on Windows)")
+    else:
+        symlink_path = project / "sneaky_link.txt"
+        symlink_path.symlink_to("/etc/passwd")
+        def _test_symlink_escape():
+            try:
+                validate_path(str(symlink_path), str(project), write=False)
+                raise AssertionError("Should have raised ValueError")
+            except ValueError as e:
+                assert "hors du sandbox" in str(e), f"Wrong error: {e}"
+        _test("symlink escape BLOCKED", _test_symlink_escape)
+
+    # 6. Chemin relatif sans project_root → ValueError
+    def _test_no_root():
+        try:
+            validate_path("file.txt", None, write=False)
+            raise AssertionError("Should have raised ValueError")
+        except ValueError as e:
+            assert "relatif sans projet" in str(e), f"Wrong error: {e}"
+    _test("relative without project_root BLOCKED", _test_no_root)
+
+    # 7. Écriture sans project_root → ValueError
+    def _test_write_no_root():
+        try:
+            validate_path(str(home_file), None, write=True)
+            raise AssertionError("Should have raised ValueError")
+        except ValueError as e:
+            assert "sans projet ouvert" in str(e), f"Wrong error: {e}"
+    _test("write without project_root BLOCKED", _test_write_no_root)
+
+    # Cleanup
+    shutil.rmtree(tmpdir)
+
+    print(f"\n=== Results: {passed} passed, {failed} failed ===\n")
+    exit(1 if failed else 0)

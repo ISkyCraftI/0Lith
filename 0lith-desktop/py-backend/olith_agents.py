@@ -8,12 +8,14 @@ la boucle agent avec tool calls, et l'historique de conversation.
 
 import re
 import json
+import time
 import threading
 from collections import deque
 
 from olith_shared import (
     AGENT_COLORS, AGENT_EMOJIS,
     strip_think_blocks, log_warn, log_info,
+    extract_memories, memory_text,
 )
 from olith_memory_init import AGENTS, OLLAMA_URL, QDRANT_URL, check_service
 from olith_ollama import (
@@ -42,7 +44,7 @@ AGENT_TIMEOUTS = {
 AGENT_NUM_CTX = {
     "hodolith": 2048,
     "monolith": 8192,
-    "aerolith": 8192,
+    "aerolith": 32768,
     "cryolith": 4096,
     "pyrolith": 8192,
 }
@@ -283,21 +285,9 @@ def search_memories(memory, message: str, agent_id: str) -> list[str]:
 
     memories_used = []
 
-    def _extract(results) -> list:
-        if isinstance(results, dict):
-            return results.get("results", [])
-        elif isinstance(results, list):
-            return results
-        return []
-
-    def _text(mem) -> str:
-        if isinstance(mem, dict):
-            return mem.get("memory", mem.get("text", ""))
-        return str(mem)
-
     try:
-        for mem in _extract(memory.search(message, user_id=agent_id, limit=3)):
-            text = _text(mem)
+        for mem in extract_memories(memory.search(message, user_id=agent_id, limit=3)):
+            text = memory_text(mem)
             if text:
                 memories_used.append(text)
     except Exception as e:
@@ -305,8 +295,8 @@ def search_memories(memory, message: str, agent_id: str) -> list[str]:
 
     if agent_id != "shared":
         try:
-            for mem in _extract(memory.search(message, user_id="shared", limit=2)):
-                text = _text(mem)
+            for mem in extract_memories(memory.search(message, user_id="shared", limit=2)):
+                text = memory_text(mem)
                 if text and text not in memories_used:
                     memories_used.append(text)
         except Exception as e:
@@ -320,20 +310,8 @@ def tool_search_mem0(memory, query: str, agent_id: str) -> dict:
     if not memory or not query:
         return {"error": "Memory non initialisée ou query vide"}
     try:
-        results = memory.search(query, user_id=agent_id, limit=5)
-        if isinstance(results, dict):
-            memories_list = results.get("results", [])
-        elif isinstance(results, list):
-            memories_list = results
-        else:
-            memories_list = []
-
-        formatted = []
-        for mem in memories_list:
-            if isinstance(mem, dict):
-                formatted.append(mem.get("memory", mem.get("text", str(mem))))
-            else:
-                formatted.append(str(mem))
+        memories_list = extract_memories(memory.search(query, user_id=agent_id, limit=5))
+        formatted = [memory_text(mem) or str(mem) for mem in memories_list]
         return {"results": formatted, "count": len(formatted)}
     except Exception as e:
         return {"error": str(e)}
@@ -354,6 +332,24 @@ def tool_add_mem0(memory, content: str, agent_id: str) -> dict:
         return {"error": str(e)}
 
 
+# Patterns triviaux qui ne méritent pas d'être stockés en mémoire partagée
+_TRIVIAL_PREFIXES = re.compile(
+    r"^\s*(salut|bonjour|bonsoir|hello|hi|hey|coucou|yo|merci|thanks|ok|oui|non|"
+    r"d'accord|c'est bon|parfait|super|cool|nice|bien|top|ouais|nope|yep)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_worth_sharing(message: str) -> bool:
+    """Heuristique : le message contient-il une info factuelle/préférence
+    qui mérite d'être partagée entre agents ?"""
+    if len(message) <= 50:
+        return False
+    if _TRIVIAL_PREFIXES.match(message):
+        return False
+    return True
+
+
 # ============================================================================
 # AGENT LOOP — The core: prompt → response → detect tools → execute → loop
 # ============================================================================
@@ -365,6 +361,7 @@ def run_agent_loop(
     project_root: str | None,
     emit=None,
     route_reason: str | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> dict:
     """Execute la boucle agent complète avec tool calls et conversation history.
 
@@ -420,26 +417,39 @@ def run_agent_loop(
     final_response_parts = []
     iteration = 0
 
+    cancelled = False
+
     while iteration < MAX_AGENT_LOOP_ITERATIONS:
         iteration += 1
+
+        # Check cancel before each iteration
+        if cancel_event and cancel_event.is_set():
+            cancelled = True
+            break
 
         # Appel Ollama
         if agent_info.get("location") == "docker":
             if emit and iteration == 1:
                 response_text = chat_docker_pyrolith_stream(
-                    ollama_messages, timeout, emit, num_ctx
+                    model, ollama_messages, timeout, emit, num_ctx
                 )
             else:
                 response_text = chat_docker_pyrolith(
-                    ollama_messages, timeout, num_ctx
+                    model, ollama_messages, timeout, num_ctx
                 )
         else:
             if emit and iteration == 1:
                 full_response = []
                 for chunk in chat_with_ollama_stream(model, ollama_messages, timeout, num_ctx):
+                    if cancel_event and cancel_event.is_set():
+                        cancelled = True
+                        break
                     full_response.append(chunk)
                     emit({"status": "streaming", "chunk": chunk})
                 response_text = "".join(full_response)
+                if cancelled:
+                    final_response_parts.append(response_text)
+                    break
             else:
                 response_text = chat_with_ollama(model, ollama_messages, timeout, num_ctx)
 
@@ -501,34 +511,40 @@ def run_agent_loop(
     # Assembler la reponse finale
     response_text = "\n\n".join(part for part in final_response_parts if part)
 
-    # Sauvegarder dans l'historique de conversation
-    conversation_history.add(agent_id, "user", message)
-    conversation_history.add(agent_id, "assistant", response_text)
+    # Sauvegarder dans l'historique de conversation (skip si cancelled sans contenu)
+    if not cancelled or response_text:
+        conversation_history.add(agent_id, "user", message)
+        if response_text:
+            conversation_history.add(agent_id, "assistant", response_text)
 
-    # Stockage en memoire (non-bloquant)
-    if memory:
+    # Stockage en memoire (non-bloquant, skip si cancelled)
+    # TODO: implémenter un garbage collector qui supprime les mémoires
+    #       de type "conversation" de plus de 30 jours (mem0 metadata query)
+    result_thread = None
+    if memory and not cancelled and response_text:
         def _store(mem, msg, aid, resp):
+            ts = int(time.time())
             try:
                 clean = strip_think_blocks(resp)
                 mem.add(
                     f"User: {msg}\n{aid.capitalize()}: {clean} /no_think",
                     user_id=aid,
-                    metadata={"type": "conversation", "agent_id": aid},
+                    metadata={"type": "conversation", "agent_id": aid, "timestamp": ts},
                 )
-                mem.add(
-                    f"User: {msg} /no_think",
-                    user_id="shared",
-                    metadata={"type": "conversation", "agent_id": aid},
-                )
+                # Stockage shared uniquement si le message est substantiel
+                # (pas les salutations, remerciements, confirmations simples)
+                if _is_worth_sharing(msg):
+                    mem.add(
+                        f"User: {msg} /no_think",
+                        user_id="shared",
+                        metadata={"type": "conversation", "agent_id": aid, "timestamp": ts},
+                    )
             except Exception as e:
                 log_warn("memory_store", f"Failed to store conversation for {aid}: {e}")
 
         t = threading.Thread(target=_store, args=(memory, message, agent_id, response_text), daemon=True)
         t.start()
-        # Return the thread for tracking
         result_thread = t
-    else:
-        result_thread = None
 
     result = {
         "agent_id": agent_id,
@@ -539,6 +555,7 @@ def run_agent_loop(
         "model": model,
         "memories_used": len(memories_used),
         "tool_iterations": iteration,
+        "cancelled": cancelled,
         "_thread": result_thread,  # For the backend to track
     }
     if route_reason is not None:
