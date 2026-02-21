@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__acp__Write",
+      "mcp__acp__Bash",
+      "mcp__acp__Edit",
+      "Bash(git -C \"C:/Users/skycr/Perso/0Lith\" rm -r --cached 0lith-desktop/node_modules/)",
+      "Bash(git -C \"C:/Users/skycr/Perso/0Lith\" status --short)",
+      "Bash(cmd /c \"git status\")",
+      "Bash(cmd /c \"git status --short 2>&1\")",
+      "Bash(git --git-dir=\"C:/Users/skycr/Perso/0Lith/.git\" --work-tree=\"C:/Users/skycr/Perso/0Lith\" status --short)",
+      "Bash(git --git-dir=\"C:\\\\Users\\\\skycr\\\\Perso\\\\0Lith\\\\.git\" --work-tree=\"C:\\\\Users\\\\skycr\\\\Perso\\\\0Lith\" status --short)"
+    ]
+  }
+}

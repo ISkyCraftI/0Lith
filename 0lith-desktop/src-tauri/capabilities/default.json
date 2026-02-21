@@ -1,0 +1,41 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for 0Lith",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "notification:default",
+    "shell:allow-stdin-write",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "python-backend",
+          "cmd": "python",
+          "args": ["../py-backend/olith_core.py"]
+        },
+        {
+          "name": "python-watcher",
+          "cmd": "python",
+          "args": ["../py-backend/olith_watcher.py"]
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "python-backend",
+          "cmd": "python",
+          "args": ["../py-backend/olith_core.py"]
+        },
+        {
+          "name": "python-watcher",
+          "cmd": "python",
+          "args": ["../py-backend/olith_watcher.py"]
+        }
+      ]
+    }
+  ]
+}
