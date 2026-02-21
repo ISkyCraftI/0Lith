@@ -29,8 +29,10 @@ env/
 .ruff_cache/
 
 # ===== Obsidian =====
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
+.obsidian/
+
+# ===== Claude Code =====
+.claude/
 
 # ===== OS =====
 .DS_Store
