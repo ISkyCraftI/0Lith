@@ -1,6 +1,7 @@
 import * as backend from "./pythonBackend.svelte";
 import type { StreamCallback } from "./pythonBackend.svelte";
 import * as agentsStore from "./agents.svelte";
+import * as sessions from "./sessions.svelte";
 import type {
   ChatMessage,
   AgentId,
@@ -200,6 +201,12 @@ export async function sendMessage(text: string): Promise<void> {
 
     agentsStore.setStatus(chat.agent_id, "idle");
     activeAgent = chat.agent_id;
+
+    // Track session and refresh sidebar list
+    if (res.session_id) {
+      sessions.setCurrentSessionId(res.session_id as string);
+    }
+    sessions.fetchSessions().catch(() => {});
   } catch (e: any) {
     addMessage({ type: "error", content: e?.message ?? "Request failed" });
   } finally {
@@ -235,6 +242,15 @@ export function addSystemMessage(text: string): void {
 
 export function clearMessages(): void {
   messages = [];
+  // Reset backend conversation history and start a fresh session
+  backend
+    .send({ id: crypto.randomUUID(), command: "clear_history" } as IPCRequest, 5000)
+    .catch(() => {});
+  sessions.newSession().catch(() => {});
+}
+
+export function loadSessionMessages(restored: ChatMessage[]): void {
+  messages = restored;
 }
 
 export function sendFeedback(

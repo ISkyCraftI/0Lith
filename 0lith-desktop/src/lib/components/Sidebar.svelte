@@ -3,7 +3,9 @@
     import * as agentsStore from "../stores/agents.svelte";
     import * as chat from "../stores/chat.svelte";
     import * as gaming from "../stores/gaming.svelte";
-    import type { Agent, AgentId, AgentStatus } from "../types/ipc";
+    import * as sessionsStore from "../stores/sessions.svelte";
+    import * as backend from "../stores/pythonBackend.svelte";
+    import type { Agent, AgentId, AgentStatus, IPCRequest, ChatMessage } from "../types/ipc";
 
     interface Props {
         loadedModels?: Array<{
@@ -123,6 +125,91 @@
     }
 
     let settingsOpen = $state(false);
+
+    let sessionsList = $derived(sessionsStore.getSessions());
+    let currentSessionId = $derived(sessionsStore.getCurrentSessionId());
+
+    // Fetch sessions on mount
+    $effect(() => {
+        sessionsStore.fetchSessions();
+    });
+
+    function formatRelativeDate(ts: number): string {
+        const now = Date.now();
+        const diff = now - ts;
+        const day = 86400000;
+        if (diff < day) return "Aujourd'hui";
+        if (diff < day * 2) return "Hier";
+        const d = new Date(ts);
+        return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    }
+
+    const AGENT_COLORS: Record<string, string> = {
+        hodolith: "#FFB02E",
+        monolith: "#181A1E",
+        aerolith: "#43AA8B",
+        cryolith: "#7BDFF2",
+        pyrolith: "#BF0603",
+    };
+    const AGENT_EMOJIS: Record<string, string> = {
+        hodolith: "🟨",
+        monolith: "⬛",
+        aerolith: "⬜",
+        cryolith: "🟦",
+        pyrolith: "🟥",
+    };
+    const AGENT_NAMES: Record<string, string> = {
+        hodolith: "Hodolith",
+        monolith: "Monolith",
+        aerolith: "Aerolith",
+        cryolith: "Cryolith",
+        pyrolith: "Pyrolith",
+    };
+
+    async function handleSelectSession(sessionId: string) {
+        if (sessionId === currentSessionId) return;
+        const rawMessages = await sessionsStore.loadSession(sessionId);
+        if (!rawMessages) return;
+
+        // Clear backend conversation history before loading a different session
+        backend.send(
+            { id: crypto.randomUUID(), command: "clear_history" } as IPCRequest,
+            5000,
+        ).catch(() => {});
+
+        // Map backend messages to ChatMessage format with agent metadata
+        const mapped: ChatMessage[] = rawMessages.map((m: any) => ({
+            id: crypto.randomUUID(),
+            type: m.type ?? "user",
+            content: m.content ?? "",
+            timestamp: m.timestamp ?? Date.now(),
+            agentId: m.agent_id as AgentId | undefined,
+            agentName: m.agent_name ?? (m.agent_id ? AGENT_NAMES[m.agent_id] : undefined),
+            agentColor: m.agent_color ?? (m.agent_id ? AGENT_COLORS[m.agent_id] : undefined),
+            agentEmoji: m.agent_emoji ?? (m.agent_id ? AGENT_EMOJIS[m.agent_id] : undefined),
+        }));
+
+        chat.loadSessionMessages(mapped);
+    }
+
+    async function handleNewSession() {
+        // Clear backend conversation history
+        backend.send(
+            { id: crypto.randomUUID(), command: "clear_history" } as IPCRequest,
+            5000,
+        ).catch(() => {});
+
+        const id = await sessionsStore.newSession();
+        if (id) {
+            chat.loadSessionMessages([]); // Clear without triggering clearMessages() side-effects
+        }
+
+        // Focus the input bar
+        setTimeout(() => {
+            const textarea = document.querySelector<HTMLTextAreaElement>(".input-bar textarea");
+            textarea?.focus();
+        }, 50);
+    }
 </script>
 
 <aside class="sidebar">
@@ -174,6 +261,36 @@
                 ></div>
             </div>
         {/each}
+    </div>
+
+    <!-- Session history -->
+    <div class="history-header">
+        <span class="history-label">Historique</span>
+        <button class="new-session-btn" onclick={handleNewSession} title="Nouvelle conversation">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="sessions-list">
+        {#if sessionsList.length === 0}
+            <div class="no-sessions">Aucune conversation</div>
+        {:else}
+            {#each sessionsList.slice(0, 20) as session (session.session_id)}
+                <button
+                    class="session-item"
+                    class:session-active={session.session_id === currentSessionId}
+                    onclick={() => handleSelectSession(session.session_id)}
+                >
+                    <div class="session-preview">{session.preview.length > 60 ? session.preview.slice(0, 60) + "…" : session.preview}</div>
+                    <div class="session-meta">
+                        <span class="session-date">{formatRelativeDate(session.updated_at)}</span>
+                        <span class="session-count">{session.message_count} msg</span>
+                    </div>
+                </button>
+            {/each}
+        {/if}
     </div>
 
     <!-- VRAM indicator -->
@@ -325,7 +442,6 @@
         padding: 0.75rem 1rem 0.25rem;
     }
     .agents-list {
-        flex: 1;
         overflow-y: auto;
         padding: 0.25rem 0.5rem;
     }
@@ -504,5 +620,93 @@
     }
     .gaming-text {
         color: #6b7280;
+    }
+
+    /* ── Session history ── */
+    .history-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem 1rem 0.25rem;
+        border-top: 1px solid var(--border);
+    }
+    .history-label {
+        font-size: 0.65rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+    .new-session-btn {
+        width: 22px;
+        height: 22px;
+        border: none;
+        border-radius: 4px;
+        background: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s, color 0.15s;
+    }
+    .new-session-btn:hover {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+    }
+    .sessions-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.25rem 0.5rem;
+        min-height: 0;
+    }
+    .no-sessions {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        padding: 0.5rem;
+        text-align: center;
+        opacity: 0.6;
+    }
+    .session-item {
+        display: block;
+        width: 100%;
+        padding: 0.4rem 0.5rem;
+        border: none;
+        border-left: 2px solid transparent;
+        border-radius: 4px;
+        background: none;
+        color: var(--text-secondary);
+        text-align: left;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+        margin-bottom: 1px;
+    }
+    .session-item:hover {
+        background: var(--bg-tertiary);
+    }
+    .session-item.session-active {
+        background: #3A3F4B;
+        border-left-color: var(--text-primary);
+    }
+    .session-preview {
+        font-size: 0.75rem;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .session-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: 0.15rem;
+    }
+    .session-date {
+        font-size: 0.6rem;
+        color: var(--text-muted);
+    }
+    .session-count {
+        font-size: 0.55rem;
+        color: var(--text-muted);
+        opacity: 0.7;
     }
 </style>

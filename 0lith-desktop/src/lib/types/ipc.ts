@@ -49,7 +49,10 @@ export interface IPCRequest {
     | "clear_history"
     | "feedback"
     | "system_info"
-    | "clear_memories";
+    | "clear_memories"
+    | "list_sessions"
+    | "load_session"
+    | "new_session";
   [key: string]: unknown;
 }
 
@@ -140,6 +143,28 @@ export interface WatcherCommand {
   action?: "accepted" | "dismissed" | "modified";
   modified_text?: string;
   watch_dir?: string;
+}
+
+// ── Session History ──
+
+export interface SessionInfo {
+  session_id: string;
+  message_count: number;
+  preview: string;
+  updated_at: number;
+}
+
+export interface ListSessionsResponse extends IPCResponse {
+  sessions: SessionInfo[];
+}
+
+export interface LoadSessionResponse extends IPCResponse {
+  session_id: string;
+  messages: ChatMessage[];
+}
+
+export interface NewSessionResponse extends IPCResponse {
+  session_id: string;
 }
 
 export interface WatcherStatusEvent {

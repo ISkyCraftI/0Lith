@@ -39,6 +39,8 @@
                 qdrantOk = statusRes.qdrant;
                 loadedModels = statusRes.loaded_models ?? [];
                 vramUsedGb = statusRes.vram_used_gb ?? 0;
+                // Update Pyrolith agent status based on Docker availability
+                agentsStore.setStatus("pyrolith", statusRes.pyrolith_docker ? "idle" : "offline");
             }
         } catch (e: any) {
             chat.addSystemMessage(`Status refresh failed: ${e?.message || e}`);
