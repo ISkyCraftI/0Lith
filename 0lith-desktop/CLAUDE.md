@@ -37,11 +37,11 @@
 ## The 5 Agents (Cybersecurity Dock V1)
 | Agent | Model | Role | Emoji | Color | VRAM | Location |
 |-------|-------|------|-------|-------|------|----------|
-| Hodolith | qwen3:1.7b | Dispatcher + Observer | 🟡 | #EAB308 | ~1.5 GB | local |
-| Monolith | qwen3:14b | Orchestrator, general reasoning | 🔵 | #3B82F6 | ~10 GB | local |
-| Aerolith | qwen3-coder:30b | Coder (slow but high quality) | 🟢 | #43AA8B | ~18 GB (CPU offload) | local |
-| Cryolith | Foundation-Sec-8B | Blue Team defense | 🔷 | #0EA5E9 | ~5 GB | local |
-| Pyrolith | DeepHat-V1-7B | Red Team offensive | 🔴 | #EF4444 | ~5 GB | Docker :11435 |
+| Hodolith | qwen3:1.7b | Dispatcher + Observer | yellow | #EAB308 | ~1.5 GB | local |
+| Monolith | qwen3:14b | Orchestrator, general reasoning | black | #3B82F6 | ~10 GB | local |
+| Aerolith | qwen3-coder:30b | Coder (slow but high quality) | green | #43AA8B | ~18 GB (CPU offload) | local |
+| Cryolith | Foundation-Sec-8B | Blue Team defense | blue | #0EA5E9 | ~5 GB | local |
+| Pyrolith | DeepHat-V1-7B | Red Team offensive | red | #EF4444 | ~5 GB | Docker :11435 |
 
 ## Agent Dock Architecture
 0Lith is built as a **dock**: fixed core + pluggable agent modules.
@@ -49,8 +49,8 @@
 ```
 CORE (always active): Hodolith + Mem0 + Qdrant + qwen3-embedding:0.6b
 DOCK Cybersec (V1):   Monolith, Aerolith, Cryolith, Pyrolith
-DOCK Game Dev (M3+):  Storylith, Artlith, Gamelith (future YAML configs)
-DOCK Personal (M4+):  Schedulith, Econolith (future YAML configs)
+DOCK Personal (M3+):  Schedulith, Econolith (future YAML configs)
+DOCK Game Dev (M4+):  Storylith, Artlith, Gamelith (future YAML configs)
 ```
 
 Adding an agent = adding a YAML file in `/agents/`, not code changes. YAML agent configs are planned for Month 3. Until then, agents are hardcoded in `olith_memory_init.py`.
@@ -72,6 +72,7 @@ GAMING MODE (manual toggle or future auto-detect):
   Hodolith falls back to CPU-only (slow but functional)
   Suggestions queue silently, displayed after session
   0Lith VRAM: ~0 GB → 16 GB free for gaming
+  Enventually, have an agent that is silently there to monitor gaming activity and provide insights
 
 NIGHT MODE (PC idle, no gaming):
   Pyrolith vs Cryolith sparring on recent CVEs
@@ -126,6 +127,26 @@ Separate Python process from olith_core.py. Launched in parallel by Tauri.
 - NOT blue/slate — warm dark grays preferred
 - Agent colors: Hodolith #EAB308, Monolith #3B82F6, Aerolith #43AA8B, Cryolith #0EA5E9, Pyrolith #EF4444
 
+## Memory Architecture Evolution
+
+**V1 (current)**: Mem0 + Qdrant + Kuzu — pragmatic, battle-tested, Ollama-native.
+- Embeddings: `qwen3-embedding:0.6b` (1024 dims, code-aware, #1 MTEB Multilingual)
+- Multi-agent scoping: `agent_id` + `user_id` for private/shared memories
+- VRAM overhead: ~350 MB (embeddings only), Qdrant + Kuzu run on CPU
+- Why NOT a "Bibliolith" LLM for memory: would cost 5-10 GB VRAM, hallucination risk, 1-5s latency vs 5ms
+
+**V2 (evaluate when V1 stable)**: MemOS v2.0 (Shanghai Jiao Tong University)
+- MemCube abstraction: plaintext + KV-cache + LoRA weights + tool trajectories
+- +38.9% vs Mem0, -94% latency via KV-cache injection
+- Tool Memory: replay sparring trajectories for faster planning
+- Requires: Docker + Redis Streams, more complex setup
+
+**V3 (future)**: Memory-R1 / Mem-α — RL-trained memory management
+- Agent learns WHEN to add/update/delete memories (+57% F1 vs Mem0)
+- Requires pre-trained RL models on Ollama (not yet available)
+
+Full research: `Reflexions/0Lith_Memory_Architecture.md` and `Reflexions/0Lith_Embeddings_Memory_Research.md`.
+
 ## Project Status
 - [x] Phase 0: Ping-pong IPC prototype
 - [x] Phase 1: Backend Python (olith_core.py, Hodolith routing, Mem0/Qdrant)
@@ -133,17 +154,55 @@ Separate Python process from olith_core.py. Launched in parallel by Tauri.
 - [x] Phase 3: Gaming mode (VRAM unload toggle)
 - [x] Phase 3: System tray (background persistence, notifications)
 - [x] Phase 3: Background loop (olith_watcher.py, file watcher, suggestions panel)
-- [ ] Phase 3: Shadow Thinking (proactive memory preparation)
-- [ ] Phase 3: Chat persistence (SQLite or JSON history)
-- [ ] Future: Agent dock YAML configs
+- [x] Phase 3: Chat persistence (JSON history, `~/.0lith/chats/`, session sidebar)
+- [ ] Phase 3: Shadow Thinking (proactive memory preparation) — **HIGH PRIORITY**
+- [x] Launch: Repo cleanup — gitignore enhanced, Reflexions/ staged, root CLAUDE.md added
+- [ ] Launch: AGPL-3.0 license, English README, demo video
+- [ ] Launch: One working red/blue team end-to-end demo flow
+- [ ] Feature: Conversation deletion + multi-select
+- [ ] Feature: Sidebar tabs (Agents / History separated)
+- [ ] Feature: OLithEye animated SVG (5 states: idle, thinking, responding, sleeping, gaming)
+- [ ] Feature: MCP Server for Zed.dev
+- [ ] Feature: Agent dock YAML configs
 - [ ] Future: Game dev dock (Storylith, Artlith, Gamelith)
 - [ ] Future: Personal dock (Schedulith, Econolith)
+- [ ] Future: Sparring nocturne (Pyrolith vs Cryolith overnight on CVEs)
 - [ ] Future: Google Takeout ingestion pipeline
-- [ ] Future: Gaming habit learning (LoL stats, play patterns)
+
+## Launch Preparation
+
+Immediate non-code priorities (from `Reflexions/Matrice Einsenhower.md`):
+
+**This week:**
+1. ~~Repo cleanup: fix `.gitignore`, remove `__pycache__`/`.obsidian` from tracking~~ **DONE**
+2. Add AGPL-3.0 LICENSE file
+3. English README: pitch, demo GIF, hardware requirements, 5-step quickstart
+4. One working end-to-end demo (red OR blue team flow)
+
+**Next 2-4 weeks:**
+5. Demo video 2-3 min (r/LocalLLaMA, Hacker News)
+6. Installer bundle (.exe with Ollama + models + Qdrant + GUI)
+7. GitHub topics, issue templates, Sponsors activation
+8. r/LocalLLaMA launch post
+
+## Business Context
+
+**Positioning**: Only tool combining multi-agents + desktop GUI + 100% local + cybersecurity. No competitor covers all four.
+
+**License**: AGPL-3.0 (copyleft — commercial forks need license)
+
+**Revenue**: GitHub Sponsors + commercial AGPL license + B2B NIS2/DORA consulting
+
+**Market**: Cybersecurity AI $30.9B (2025) → $86-104B (2030). Regulatory push: NIS2, DORA, EU AI Act.
+
+**Window**: 18-36 months before Big Tech ships local multi-agent desktop tools.
+
+Full analysis: `Reflexions/Etude de Marché.md`.
 
 ## Commands
 - Dev: `cd C:\Users\skycr\Perso\0Lith\0lith-desktop && npm run tauri dev`
 - Build: `npm run tauri build`
+- Type check: `npm run check`
 - Python backend deps: `cd py-backend && pip install -r requirements.txt`
 - Qdrant Docker: `docker start qdrant` (port 6333)
 - Pyrolith Docker: `docker start pyrolith` (port 11435, needs `--gpus all`)
@@ -155,20 +214,25 @@ Separate Python process from olith_core.py. Launched in parallel by Tauri.
 ```
 0lith-desktop/
 ├── src-tauri/              # Rust/Tauri 2 backend
-│   ├── src/lib.rs
+│   ├── src/lib.rs          # System tray, gaming mode sync, window management
 │   ├── capabilities/default.json
 │   └── tauri.conf.json
 ├── src/                    # Svelte 5 frontend
-│   ├── lib/components/     # AgentCard, ChatInterface, MessageBubble, etc.
-│   ├── lib/stores/         # agents.svelte.ts, suggestions.svelte.ts
-│   ├── lib/types/          # agents.ts
+│   ├── lib/components/     # Sidebar, ChatArea, ChatMessage, InputBar, StatusBar, etc.
+│   ├── lib/stores/         # pythonBackend, chat, agents, sessions, gaming, watcher
+│   ├── lib/types/ipc.ts    # Full IPC protocol types
 │   └── App.svelte
 ├── py-backend/             # Python backend
-│   ├── olith_core.py       # IPC chat (reactive)
-│   ├── olith_watcher.py    # Background loop (proactive, Phase 3)
-│   ├── olith_memory_init.py
+│   ├── olith_core.py       # IPC chat router (reactive)
+│   ├── olith_agents.py     # Agent routing + execution (Hodolith → agents)
+│   ├── olith_ollama.py     # Ollama API wrapper (streaming, retry, process mgmt)
+│   ├── olith_tools.py      # Sandboxed filesystem tools + system info
+│   ├── olith_history.py    # JSON session persistence (~/.0lith/chats/)
+│   ├── olith_shared.py     # Mem0 monkey-patch, think-block stripping, logging
+│   ├── olith_watcher.py    # Background loop (proactive, file watcher, suggestions)
+│   ├── olith_memory_init.py # Agent identities + Mem0/Qdrant/Kuzu setup
 │   └── requirements.txt
-└── agents/                 # YAML agent configs (future Month 3)
+└── agents/                 # YAML agent configs (future)
 ```
 
 ## Design Principles
@@ -177,3 +241,4 @@ Separate Python process from olith_core.py. Launched in parallel by Tauri.
 3. **Memory is the moat**: Aerolith's advantage over Claude Code isn't intelligence — it's knowing Matthieu's patterns, style, and history after months of context.
 4. **Each month is usable**: Never "under construction". Month 1 = good chat. Month 2 = proactive suggestions. Month 3 = pluggable agents. Stop at any point and it's still useful.
 5. **Level 2 never without permission**: The system suggests, never acts autonomously.
+6. **Sovereign by design**: AGPL license, zero cloud, zero telemetry. Data never leaves the machine.

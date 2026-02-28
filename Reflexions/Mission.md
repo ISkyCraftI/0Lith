@@ -68,7 +68,7 @@ Application desktop native (Tauri 2) qui :
 | **Styling** | TailwindCSS 4 | 4.x | |
 | **Composants UI** | bits-ui | latest | Alternative stable à shadcn-svelte pour Svelte 5 |
 | **Icônes** | Lucide Svelte | latest | |
-| **Backend** | Python | 3.11 ou 3.12 | **PAS 3.13+** (incompatible Kuzu) |
+| **Backend** | Python | 3.12 | **PAS 3.13+** (incompatible Kuzu) |
 | **Communication** | Process spawn | stdin/stdout | JSON line-delimited |
 | **Mémoire** | Mem0 + Qdrant | latest | Docker pour Qdrant |
 | **Graphe (optionnel)** | Kuzu | 0.8.x+ | Embarqué, pas de serveur |
@@ -296,15 +296,13 @@ pub fn run() {
 
 > **Note Windows** : Le `cmd` peut être `python` ou `python3` selon l'installation. Si Python est dans un venv, utiliser le chemin complet : `py-backend/.venv/Scripts/python.exe`
 
-### Critères de succès Phase 0
+### Critères de succès Phase 0 ✅ VALIDÉ
 
-- [ ] `npm run tauri dev` lance l'application
-- [ ] Le bouton "Ping Python" envoie un message JSON
-- [ ] Python le reçoit sur stdin, répond sur stdout
-- [ ] Svelte affiche la réponse dans l'interface
-- [ ] Aucune erreur dans la console Rust ni dans la console navigateur
-
-**⚠️ NE PAS CONTINUER SI CES 5 POINTS NE SONT PAS VALIDÉS.**
+- [x] `npm run tauri dev` lance l'application
+- [x] Le bouton "Ping Python" envoie un message JSON
+- [x] Python le reçoit sur stdin, répond sur stdout
+- [x] Svelte affiche la réponse dans l'interface
+- [x] Aucune erreur dans la console Rust ni dans la console navigateur
 
 ---
 
@@ -434,14 +432,14 @@ ollama>=0.4.0
 > Si Python 3.13+ : Kuzu ne compile pas. Le système fonctionne sans (mode vecteurs uniquement).
 > Pour installer avec graphe : `pip install "mem0ai[graph]"`
 
-### Critères de succès Phase 1
+### Critères de succès Phase 1 ✅ VALIDÉ
 
-- [ ] `python py-backend/olith_core.py` accepte JSON sur stdin, répond sur stdout
-- [ ] Commande `status` retourne l'état réel d'Ollama et Qdrant
-- [ ] Commande `chat` route via Hodolith et obtient une réponse d'un agent
-- [ ] Commande `search` retourne des mémoires depuis Qdrant
-- [ ] Timeout de 600s pour les réponses lentes (Aerolith 30B)
-- [ ] Les erreurs retournent `{"status": "error", "message": "..."}`, jamais de crash
+- [x] `python py-backend/olith_core.py` accepte JSON sur stdin, répond sur stdout
+- [x] Commande `status` retourne l'état réel d'Ollama et Qdrant
+- [x] Commande `chat` route via Hodolith et obtient une réponse d'un agent
+- [x] Commande `search` retourne des mémoires depuis Qdrant
+- [x] Timeout de 600s pour les réponses lentes (Aerolith 30B)
+- [x] Les erreurs retournent `{"status": "error", "message": "..."}`, jamais de crash
 
 ---
 
@@ -575,44 +573,46 @@ Le chat doit :
 - Indicateur quand Aerolith charge le modèle 30B (peut prendre 30s+)
 - Gérer les timeouts gracieusement (message "L'agent met plus de temps que prévu...")
 
-### Critères de succès Phase 2
+### Critères de succès Phase 2 ✅ VALIDÉ
 
-- [ ] Dark theme cohérent, pas de blanc
-- [ ] Les 5 agents s'affichent dans la sidebar avec bonnes couleurs
-- [ ] Status des agents se met à jour (idle → thinking → responding)
-- [ ] Chat envoie message → reçoit routage Hodolith → reçoit réponse agent
-- [ ] Les code blocks sont rendus correctement dans les réponses
-- [ ] L'interface reste responsive même quand Aerolith prend 5 min
+- [x] Dark theme cohérent, pas de blanc
+- [x] Les 5 agents s'affichent dans la sidebar avec bonnes couleurs
+- [x] Status des agents se met à jour (idle → thinking → responding)
+- [x] Chat envoie message → reçoit routage Hodolith → reçoit réponse agent
+- [x] Les code blocks sont rendus correctement dans les réponses
+- [x] L'interface reste responsive même quand Aerolith prend 5 min
 
 ---
 
 ## PHASE 3: FEATURES AVANCÉES
 
-### Étape 3.1: System Tray
+### Étape 3.1: System Tray ✅ IMPLEMENTÉ
 
-```bash
-npm install @tauri-apps/plugin-tray-icon
-```
-
-- Icône dans la barre système (utiliser un PNG 32x32 simple)
-- Menu : Show/Hide window, Quit
+- Icône dans la barre système avec menu Show/Hide/Gaming Mode/Quit
 - L'app continue de tourner en arrière-plan quand on ferme la fenêtre
-- Notification quand un agent termine une tâche longue
+- Notifications via `@tauri-apps/plugin-notification`
+- Gaming Mode checkbox synchronisée avec le frontend
 
-### Étape 3.2: File Watcher Integration
+### Étape 3.2: File Watcher Integration ✅ IMPLEMENTÉ
 
-- Panel settings pour choisir un dossier projet à surveiller
-- Liste des fichiers modifiés récemment
-- Bouton "Analyser avec Aerolith" sur un fichier détecté
-- Les événements file watcher arrivent du Python via stdout (même canal IPC)
+- `olith_watcher.py` lancé en parallèle de `olith_core.py` par Tauri
+- Surveillance des fichiers via watchdog
+- Suggestions émises via stdout JSON, affichées dans SuggestionsBar
+- Pause automatique en Gaming Mode
 
-### Étape 3.3: Persistance locale
+### Étape 3.3: Persistance locale ✅ IMPLEMENTÉ
 
-- Historique de chat : SQLite via `@tauri-apps/plugin-sql` ou fichier JSON simple
-- Préférences utilisateur : `preferences.json` dans le dossier app data
-- Position et taille de la fenêtre mémorisées
+- Historique de chat : fichiers JSON dans `~/.0lith/chats/`
+- `olith_history.py` : session list, load, save, delete
+- Historique des sessions dans la sidebar avec preview + date relative
 
-### Étape 3.4: Sparring Mode (UI dédiée)
+### Étape 3.4: Gaming Mode ✅ IMPLEMENTÉ
+
+- Toggle dans la sidebar et le menu system tray
+- Décharge tous les modèles de la VRAM (Ollama keep_alive=0)
+- `sync_tray_gaming` commande Tauri pour synchroniser l'état
+
+### Étape 3.5: Sparring Mode (UI dédiée) — À FAIRE
 
 Vue spéciale pour les sessions de sparring Red vs Blue :
 - Split view : Pyrolith (gauche, rouge) vs Cryolith (droite, bleu)
@@ -678,27 +678,30 @@ interface Event {
 
 ## TESTS & VALIDATION
 
-### Phase 0 (bloquant)
-- [ ] `npm run tauri dev` lance l'app sans erreur
-- [ ] Bouton ping → Python reçoit → Python répond → Svelte affiche
-- [ ] Fonctionne sur Windows (priorité)
+### Phase 0 (bloquant) ✅
+- [x] `npm run tauri dev` lance l'app sans erreur
+- [x] Bouton ping → Python reçoit → Python répond → Svelte affiche
+- [x] Fonctionne sur Windows (priorité)
 
-### Phase 1
-- [ ] `python py-backend/olith_core.py` accepte JSON sur stdin
-- [ ] Commande `status` vérifie Ollama et Qdrant en temps réel
-- [ ] Commande `chat` avec routage Hodolith fonctionne
-- [ ] Les mémoires Mem0 sont stockées et récupérées
+### Phase 1 ✅
+- [x] `python py-backend/olith_core.py` accepte JSON sur stdin
+- [x] Commande `status` vérifie Ollama et Qdrant en temps réel
+- [x] Commande `chat` avec routage Hodolith fonctionne
+- [x] Les mémoires Mem0 sont stockées et récupérées
 
-### Phase 2
-- [ ] Dark theme, pas de blanc
-- [ ] Les 5 agents s'affichent avec statuts corrects
-- [ ] Chat complet : input → routage → réponse → affiché
-- [ ] Responsive même avec Aerolith lent (5 min)
+### Phase 2 ✅
+- [x] Dark theme, pas de blanc
+- [x] Les 5 agents s'affichent avec statuts corrects
+- [x] Chat complet : input → routage → réponse → affiché
+- [x] Responsive même avec Aerolith lent (5 min)
 
-### Phase 3
-- [ ] System tray fonctionne sur Windows
-- [ ] File watcher détecte les modifications
-- [ ] Historique de chat persiste entre sessions
+### Phase 3 ✅ (partiel)
+- [x] System tray fonctionne sur Windows
+- [x] File watcher détecte les modifications
+- [x] Historique de chat persiste entre sessions
+- [x] Gaming Mode décharge la VRAM
+- [ ] Shadow Thinking (anticipation proactive)
+- [ ] Sparring Mode UI
 
 ---
 
@@ -719,19 +722,25 @@ interface Event {
 ## PRIORITÉS D'EXÉCUTION
 
 ```
-SPRINT 0 — Validation IPC (quelques heures) :
-└─ Phase 0 : Tauri 2 + Svelte 5 + Python ping-pong ⭐⭐⭐
+SPRINT 0 — Validation IPC ✅ FAIT
+└─ Phase 0 : Tauri 2 + Svelte 5 + Python ping-pong
 
-SPRINT 1 — Backend fonctionnel (1-2 jours) :
-├─ Phase 1 : Backend Python complet ⭐⭐⭐
-└─ Intégrer olith_memory_init.py ⭐⭐⭐
+SPRINT 1 — Backend fonctionnel ✅ FAIT
+├─ Phase 1 : Backend Python complet (olith_core, agents, ollama, tools)
+└─ Intégrer olith_memory_init.py + Mem0/Qdrant
 
-SPRINT 2 — UI complète (2-3 jours) :
-├─ Phase 2 : Composants frontend ⭐⭐
-└─ Chat complet avec routage ⭐⭐
+SPRINT 2 — UI complète ✅ FAIT
+├─ Phase 2 : Composants frontend (sidebar, chat, streaming, markdown)
+└─ Chat complet avec routage Hodolith
 
-SPRINT 3 — Polish (1-2 jours) :
-└─ Phase 3 : System tray, file watcher, persistance ⭐
+SPRINT 3 — Features avancées ✅ FAIT (partiel)
+├─ System tray + gaming mode + file watcher + persistance
+└─ Reste : Shadow Thinking, Sparring UI, agents YAML
+
+SPRINT 4 — Prochaines étapes ⭐
+├─ Shadow Thinking (anticipation proactive)
+├─ Agents enfichables YAML (dock architecture)
+└─ MCP Server pour Zed.dev
 ```
 
 ---

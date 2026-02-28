@@ -1,6 +1,6 @@
 # 0Lith — Backlog d'idées
 
-> Compilé depuis toutes les conversations du projet (9 fév – 22 fév 2026).
+> Compilé depuis toutes les conversations du projet (9 fév – 28 fév 2026).
 > Légende : ✅ Fait · 🔄 En cours · ⬜ À faire · 💡 Idée brute
 
 ---
@@ -11,7 +11,7 @@
 - ⬜ **Onglet Agents** : séparer la liste des agents dans un onglet dédié (centre de contrôle pour changer de modèles, voir les statuts, gérer les docks)
 - ⬜ **Onglet Code** : onglet type Claude/Cursor pour voir le code généré par Aerolith directement dans l'app
 - ⬜ **Suppression de conversations** : bouton supprimer sur chaque session + sélection multiple (pas comme ChatGPT)
-- 🔄 **Historique des sessions** : sidebar avec preview + date relative (backend fait, frontend en cours)
+- ✅ **Historique des sessions** : sidebar avec preview + date relative
 - ⬜ **Cycle de vie des sessions** : auto-refresh après envoi, nouvelle session via "+", restauration au clic
 
 ### Logo & Identité visuelle
@@ -40,11 +40,12 @@
 
 ## 2. GAMING MODE & VRAM
 
-- ⬜ **3 modes VRAM** :
+- ✅ **Gaming Mode** : toggle qui décharge tous les modèles de la VRAM (keep_alive=0)
+- ✅ **Bouton toggle** dans la sidebar + menu system tray
+- ⬜ **3 modes VRAM granulaires** :
   - Normal : agents chargés à la demande (~6-11 Go)
   - Léger : seulement Hodolith 1.7B (~2 Go)
-  - Gaming : 0 Go VRAM, tout déchargé, barre verte "🎮 Mode Gaming — VRAM libérée"
-- ⬜ **Bouton toggle** dans la status bar + menu system tray
+  - Gaming : 0 Go VRAM (actuellement implémenté)
 - 💡 **Auto-détection** : détecter `LeagueClient.exe` / processus GPU lourds → basculer automatiquement en mode gaming
 - 💡 **Profil joueur** : LoL stats, habitudes de jeu, intégré dans la mémoire (Mois 4-5)
 
@@ -53,10 +54,10 @@
 ## 3. SYSTÈME PROACTIF (Background Loop)
 
 ### olith_watcher.py
-- ✅ Fichier créé, base fonctionnelle
-- ⬜ **File Watcher** : surveiller les dossiers de projets, détecter les modifications
+- ✅ Fichier créé, base fonctionnelle, lancé en parallèle par Tauri
+- ✅ **File Watcher** : surveillance des dossiers de projets via watchdog
+- ✅ **Panneau Suggestions** dans l'UI : SuggestionsBar affiche les suggestions Niveau 1
 - ⬜ **Shadow Thinking** : Hodolith observe un fichier modifié → extrapole les prochaines étapes → stocke des suggestions dans Mem0 tagées `shadow_thinking`
-- ⬜ **Panneau Suggestions** dans l'UI : afficher les suggestions Niveau 1 (observer/suggérer)
 - ⬜ **Boucle d'apprentissage** :
   - User accepte → Mem0 : "prédiction correcte"
   - User modifie → Mem0 : "préfère Y plutôt que X"
@@ -156,7 +157,7 @@
 ## 7. INTÉGRATIONS EXTERNES
 
 - ⬜ **MCP Server pour Zed** : exposer les agents comme outils MCP, Zed appelle Aerolith/Monolith/Cryolith directement (2-3 jours d'effort)
-- ⬜ **System Tray** : icône dans la barre système, menu Show/Hide/Gaming Mode/Quit, notifications quand suggestions en attente, app en arrière-plan
+- ✅ **System Tray** : icône dans la barre système, menu Show/Hide/Gaming Mode/Quit, app en arrière-plan
 - 💡 **Accès internet pour les agents** : recherche web, consultation d'API externes, communication avec Claude ou d'autres IA si trop perdus
 - 💡 **TryHackMe via API/VPN** : intégration pour les exercices cybersec
 
@@ -187,7 +188,7 @@
 
 - ✅ Cross-platform system_info (psutil)
 - ✅ Chat persistence (JSON, ~/.0lith/chats/)
-- ⬜ **README.md complet** : installation, prérequis, architecture, screenshots
+- ✅ **README.md complet** : installation, prérequis, architecture, screenshots
 - ⬜ **Supprimer olith_memory_init.py racine** du tracking git
 - ⬜ **HEARTBEAT.md** : pattern de monitoring proactif
 - 💡 **Logging centralisé** : Prometheus + Grafana + Loki pour tokens/s, VRAM, erreurs par agent
@@ -205,13 +206,12 @@
 
 ## PRIORITÉS SUGGÉRÉES (court terme)
 
-| # | Tâche | Effort | Impact |
-|---|-------|--------|--------|
-| 1 | Frontend sessions (sidebar historique) | 1 jour | Élevé |
-| 2 | Suppression de conversations (+ multi-select) | 0.5 jour | Élevé |
-| 3 | Onglets sidebar (Agents / Historique) | 1 jour | Moyen |
-| 4 | OLithEye animé | 1-2 jours | Moyen (polish) |
-| 5 | MCP Server Zed | 2-3 jours | Élevé (workflow) |
-| 6 | README.md complet | 0.5 jour | Moyen |
-| 7 | Gaming Mode toggle | 1 jour | Moyen |
-| 8 | System Tray | 1 jour | Moyen |
+| # | Tâche | Effort | Impact | Statut |
+|---|-------|--------|--------|--------|
+| 1 | Shadow Thinking (anticipation proactive) | 2-3 jours | Élevé | ⬜ |
+| 2 | Suppression de conversations (+ multi-select) | 0.5 jour | Élevé | ⬜ |
+| 3 | Onglets sidebar (Agents / Historique) | 1 jour | Moyen | ⬜ |
+| 4 | OLithEye animé | 1-2 jours | Moyen (polish) | ⬜ |
+| 5 | MCP Server Zed | 2-3 jours | Élevé (workflow) | ⬜ |
+| 6 | Boucle d'apprentissage suggestions | 1-2 jours | Élevé | ⬜ |
+| 7 | Agents enfichables YAML | 2-3 jours | Élevé (architecture) | ⬜ |

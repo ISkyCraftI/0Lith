@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Logo_texture.svg" alt="0Lith" width="80" />
+  <img src="Logo_texture.svg" alt="0Lith" width="100" />
 </p>
 
 <h1 align="center">0Lith</h1>
@@ -20,9 +20,9 @@
 
 ## Qu'est-ce que 0Lith ?
 
-0Lith (prononcé "zérolith") est un cockpit multi-agents qui tourne **entièrement en local** — aucun cloud, aucune API payante, aucune donnée qui quitte ta machine. Cinq agents spécialisés collaborent via un dispatcher intelligent, partagent une mémoire persistante, et apprennent de tes habitudes au fil du temps.
+0Lith (prononcé "Olith") est un cockpit multi-agents qui tourne **entièrement en local** — aucun cloud, aucune API payante, aucune donnée qui quitte ta machine. Cinq agents spécialisés collaborent via un dispatcher intelligent, partagent une mémoire persistante, et apprennent de tes habitudes au fil du temps.
 
-Le projet est né le 6 février 2025, un mois après le lancement de Claude Cowork (12 jan – 10 fév 2025), avec une conviction : un assistant IA personnel devrait tourner sur **ton** hardware, connaître **ton** contexte après des mois d'utilisation, et ne jamais dépendre d'un serveur tiers.
+Le projet est né le 6 février 2025, un mois après le lancement de Claude Cowork (12 jan – 10 fév 2025), avec une conviction : un assistant IA personnel devrait tourner sur **ton** hardware, connaître **ton** contexte après des mois d'utilisation, et d'être indépendant d'un serveur tiers.
 
 <p align="center">
   <img src="docs/screenshot.png" alt="0Lith screenshot" width="700" />
@@ -70,11 +70,11 @@ Les noms suivent une convention grecque : *Hodo-* (chemin), *Mono-* (unique), *A
 - **RAM** : 32 Go recommandé
 - **OS** : Windows 10/11 ou Linux (Ubuntu 22+)
 - **Logiciels** :
-  - [Ollama](https://ollama.com) ≥ 0.6
-  - [Docker Desktop](https://docker.com) (pour Pyrolith)
+  - [Ollama](https://ollama.com) ≥ 0.16.1 (requis pour RTX 5070 Ti / Blackwell)
+  - [Docker Desktop](https://docker.com) (pour Pyrolith + Qdrant)
   - [Node.js](https://nodejs.org) ≥ 18
   - [Rust](https://rustup.rs) (pour Tauri)
-  - Python ≥ 3.11
+  - Python 3.12 (pas 3.13+ — incompatible Kuzu)
 
 ## Installation
 
@@ -88,9 +88,15 @@ ollama pull qwen3:1.7b          # Hodolith — dispatcher
 ollama pull qwen3:14b           # Monolith — orchestrateur
 ollama pull qwen3-coder:30b     # Aerolith — codeur
 
+# Modèle d'embeddings
+ollama pull qwen3-embedding:0.6b    # Embeddings 1024 dims, code-aware
+
 # Modèles spécialisés (cybersec)
-ollama pull deephat/DeepHat-V1-7B                          # Pyrolith
 ollama pull hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF   # Cryolith
+
+# Pyrolith — isolé dans Docker (port 11435)
+docker run -d --name pyrolith -p 11435:11434 --gpus all ollama/ollama
+docker exec pyrolith ollama pull deephat/DeepHat-V1-7B
 
 # 3. Lancer Qdrant
 docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
@@ -134,8 +140,9 @@ export OLLAMA_KV_CACHE_TYPE=q8_0
 |--------|-------------|------|
 | Desktop | Tauri 2 (Rust) | Fenêtre native, sidecar Python, IPC |
 | Frontend | Svelte 5 (runes) | UI réactive, chat, sidebar |
-| Backend | Python 3.11+ | Agents, routage, mémoire, outils |
+| Backend | Python 3.12 | Agents, routage, mémoire, outils |
 | Inférence | Ollama (llama.cpp) | Modèles GGUF quantifiés Q4_K_M |
+| Embeddings | qwen3-embedding:0.6b | #1 MTEB Multilingual, 1024 dims, code-aware |
 | Mémoire | Mem0 + Qdrant | Extraction de faits, recherche sémantique |
 | Graphe | Kuzu (optionnel) | Knowledge graph, relations multi-hop |
 | Isolation | Docker | Sandbox pour l'agent offensif |
@@ -145,7 +152,7 @@ export OLLAMA_KV_CACHE_TYPE=q8_0
 
 - [x] Chat multi-agents avec routage automatique via Hodolith
 - [x] Streaming des réponses en temps réel
-- [x] Mémoire partagée entre agents (Mem0 + Qdrant)
+- [x] Mémoire partagée entre agents (Mem0 + Qdrant + qwen3-embedding:0.6b)
 - [x] Persistance des conversations (JSON, `~/.0lith/chats/`)
 - [x] Historique des sessions dans la sidebar
 - [x] Sandbox filesystem (validation de chemin, protection symlink)
@@ -154,39 +161,42 @@ export OLLAMA_KV_CACHE_TYPE=q8_0
 - [x] Filtrage mémoire intelligent (ignore les messages triviaux)
 - [x] Cross-platform system info (psutil)
 - [x] Indicateurs de statut : Backend, Ollama, Qdrant
+- [x] Gaming Mode (libération complète de la VRAM)
+- [x] System Tray (background, notifications, menu Gaming Mode)
+- [x] Background loop proactif (olith_watcher.py, file watcher, suggestions)
+- [x] Outils sandboxés pour agents (lecture/recherche de fichiers, system info)
 
 ## Roadmap
 
 ```
 FAIT ────────────────────────────────────
-✅ Chat réactif avec 5 agents
-✅ Mémoire vectorielle persistante
-✅ Interface Tauri + Svelte 5
-✅ Sécurité : sandbox, lane queue, cancel, retry
-
-EN COURS ────────────────────────────────
-🔄 Frontend sessions (sidebar complète)
-🔄 Suppression de conversations
+✅ Phase 0 : Prototype IPC Svelte ↔ Tauri ↔ Python
+✅ Phase 1 : Backend Python complet (agents, routage Hodolith, Mem0/Qdrant)
+✅ Phase 2 : Interface chat (sidebar agents, streaming, markdown, dark theme)
+✅ Phase 3 : Gaming Mode (déchargement VRAM, toggle sidebar + tray)
+✅ Phase 3 : System Tray (background, notifications, Show/Hide/Quit)
+✅ Phase 3 : Background loop (olith_watcher.py, file watcher, suggestions)
+✅ Sécurité : sandbox filesystem, lane queue, cancel IPC, retry + backoff
+✅ Persistance : sessions JSON, historique sidebar
 
 COURT TERME ─────────────────────────────
-⬜ Onglets sidebar (Agents / Historique)
-⬜ OLithEye animé (logo SVG dynamique)
-⬜ Gaming Mode (libérer la VRAM)
-⬜ System Tray (background, notifications)
+⬜ Shadow Thinking (anticipation proactive via Mem0)
+✅ OLithEye animé (logo SVG dynamique, couleur par agent)
+⬜ Onglets sidebar (Agents / Historique séparés)
 ⬜ MCP Server pour Zed.dev
-⬜ README + docs complètes
 
 MOYEN TERME ─────────────────────────────
-⬜ Système proactif (file watcher, suggestions)
-⬜ Shadow Thinking (anticipation)
-⬜ Agents enfichables via YAML
+⬜ Agents enfichables via YAML (dock architecture)
 ⬜ Dock Game Dev (Storylith, Artlith, Gamelith)
+⬜ Dock Personnel (Schedulith, Econolith)
+⬜ Sparring nocturne Pyrolith vs Cryolith
 
 LONG TERME ──────────────────────────────
-⬜ Google Takeout ingestion
+⬜ Google Takeout ingestion pipeline
 ⬜ Calendrier + données santé
-⬜ Fine-tuning LoRA par agent
+⬜ Fine-tuning LoRA par agent (QLoRA via Unsloth)
 ⬜ Réseau multi-machine (Tailscale)
+⬜ Migration vers MemOS (quand mature)
 ⬜ BCI (Brain Computer Interface)
 ```
 
