@@ -5,40 +5,46 @@
 <h1 align="center">0Lith</h1>
 
 <p align="center">
-  Système multi-agents IA souverain, local, et personnel.<br/>
-  Cybersécurité · Développement · Anticipation.
+  Your sovereign, local, multi-agent AI cockpit.<br/>
+  Cybersecurity · Development · Anticipation.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-alpha%20v0.1-orange" />
-  <img src="https://img.shields.io/badge/license-MIT-blue" />
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
+  <img src="https://img.shields.io/badge/python-3.12-blue" />
+  <img src="https://img.shields.io/badge/Tauri-2-purple" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey" />
-  <img src="https://img.shields.io/badge/GPU-RTX%205070%20Ti%2016%20Go-green" />
+  <img src="https://img.shields.io/badge/GPU-RTX%205070%20Ti%2016%20GB-green" />
 </p>
 
 ---
 
-## Qu'est-ce que 0Lith ?
+## What is 0Lith?
 
-0Lith (prononcé "Olith") est un cockpit multi-agents qui tourne **entièrement en local** — aucun cloud, aucune API payante, aucune donnée qui quitte ta machine. Cinq agents spécialisés collaborent via un dispatcher intelligent, partagent une mémoire persistante, et apprennent de tes habitudes au fil du temps.
+0Lith (pronounced "Olith") is a **personal multi-agent AI cockpit** that runs **entirely offline** — no cloud, no paid API, no data leaving your machine. Five specialized agents collaborate through an intelligent dispatcher, share persistent memory, and learn your habits over time.
 
-Le projet est né le 6 février 2025, un mois après le lancement de Claude Cowork (12 jan – 10 fév 2025), avec une conviction : un assistant IA personnel devrait tourner sur **ton** hardware, connaître **ton** contexte après des mois d'utilisation, et d'être indépendant d'un serveur tiers.
+Born on February 6, 2025 with a single conviction: a personal AI assistant should run on **your** hardware, know **your** context after months of use, and never depend on a third-party server. 0Lith is the only open-source tool that combines multi-agent orchestration, a native desktop GUI, 100% local execution, and cybersecurity specialization.
+
+## Demo
 
 <p align="center">
   <img src="docs/screenshot.png" alt="0Lith screenshot" width="700" />
 </p>
 
-## Les agents
+> Demo GIF coming soon.
 
-| Agent | Rôle | Modèle | Spécialité |
-|-------|------|--------|------------|
-| **Hodolith** | Dispatcher | Qwen3 1.7B | Classifie chaque message et le route vers le bon agent. Toujours en VRAM (~2 Go). |
-| **Monolith** | Orchestrateur | Qwen3 14B | Raisonnement en chaîne de pensée, planification, coordination. |
-| **Aerolith** | Codeur | Qwen3 Coder 30B | Génération, review et debugging de code. CPU offload (~5 min par réponse). |
-| **Cryolith** | Défensif (Blue Team) | Foundation-Sec 8B | Analyse de logs, détection d'anomalies, règles SIEM. |
-| **Pyrolith** | Offensif (Red Team) | DeepHat V1 7B | Pentesting, CTF, exploitation. Isolé dans Docker. |
+## Agents
 
-Les noms suivent une convention grecque : *Hodo-* (chemin), *Mono-* (unique), *Aero-* (air), *Pyro-* (feu), *Cryo-* (glace), avec le suffixe *-lith* (pierre) — solide, fondation.
+| Agent | Role | Model | Specialty |
+|-------|------|-------|-----------|
+| **Hodolith** | Dispatcher | Qwen3 1.7B | Classifies every message and routes it to the right agent. Always in VRAM (~2 GB). |
+| **Monolith** | Orchestrator | Qwen3 14B | Chain-of-thought reasoning, planning, coordination. |
+| **Aerolith** | Coder | Qwen3 Coder 30B | Code generation, review, and debugging. CPU offload (~5 min per response). |
+| **Cryolith** | Blue Team | Foundation-Sec 8B | Log analysis, anomaly detection, SIEM rules. |
+| **Pyrolith** | Red Team | DeepHat V1 7B | Pentesting, CTF, exploitation. Sandboxed in Docker. |
+
+Agent names follow a Greek convention: *Hodo-* (path), *Mono-* (single), *Aero-* (air), *Pyro-* (fire), *Cryo-* (ice) — all with the *-lith* suffix (stone) meaning solid foundation.
 
 ## Architecture
 
@@ -49,179 +55,192 @@ Les noms suivent une convention grecque : *Hodo-* (chemin), *Mono-* (unique), *A
 │  └─ Window management     Chat + Sidebar     │
 ├──────────────────────────────────────────────┤
 │  Python Backend                               │
-│  ├─ olith_core.py      Chat réactif (IPC)    │
-│  ├─ olith_agents.py    Routage + exécution   │
-│  ├─ olith_watcher.py   Background proactif   │
-│  ├─ olith_history.py   Persistance sessions  │
-│  ├─ olith_tools.py     Outils sandboxés      │
-│  └─ olith_shared.py    Helpers partagés      │
+│  ├─ olith_core.py      Reactive chat (IPC)   │
+│  ├─ olith_agents.py    Routing + execution   │
+│  ├─ olith_watcher.py   Proactive background  │
+│  ├─ olith_history.py   Session persistence   │
+│  ├─ olith_tools.py     Sandboxed tools       │
+│  └─ olith_shared.py    Shared helpers        │
 ├──────────────────────────────────────────────┤
-│  Infra locale                                 │
-│  ├─ Ollama             Inférence LLM         │
-│  ├─ Qdrant             Base vectorielle      │
-│  ├─ Mem0               Mémoire intelligente  │
-│  └─ Docker             Isolation Pyrolith    │
+│  Local Infrastructure                         │
+│  ├─ Ollama             LLM inference         │
+│  ├─ Qdrant             Vector database       │
+│  ├─ Mem0               Intelligent memory    │
+│  └─ Docker             Pyrolith isolation    │
 └──────────────────────────────────────────────┘
 ```
 
-## Prérequis
+## Hardware Requirements
 
-- **GPU** : NVIDIA avec ≥12 Go VRAM (testé sur RTX 5070 Ti 16 Go)
-- **RAM** : 32 Go recommandé
-- **OS** : Windows 10/11 ou Linux (Ubuntu 22+)
-- **Logiciels** :
-  - [Ollama](https://ollama.com) ≥ 0.16.1 (requis pour RTX 5070 Ti / Blackwell)
-  - [Docker Desktop](https://docker.com) (pour Pyrolith + Qdrant)
-  - [Node.js](https://nodejs.org) ≥ 18
-  - [Rust](https://rustup.rs) (pour Tauri)
-  - Python 3.12 (pas 3.13+ — incompatible Kuzu)
+| Component | Requirement | Notes |
+|-----------|-------------|-------|
+| **GPU** | NVIDIA ≥ 12 GB VRAM | Tested on RTX 5070 Ti 16 GB (Blackwell) |
+| **RAM** | 32 GB recommended | Agents + Python overhead + OS headroom |
+| **Storage** | 100 GB+ NVMe | OS + Ollama model cache + Qdrant indexes |
+| **OS** | Windows 10/11 or Linux (Ubuntu 22+) | Windows 11 recommended |
 
-## Installation
+### VRAM budget (16 GB example)
+
+| Always loaded | ~2 GB | Hodolith (1.5 GB) + embedding model (0.6 GB) |
+|---------------|-------|----------------------------------------------|
+| Monolith on demand | ~10 GB | Total ~12 GB / 16 GB |
+| Cryolith on demand | ~5 GB | Total ~7 GB / 16 GB |
+| Aerolith on demand | ~18 GB | CPU offload — slow but functional |
+| Pyrolith (Docker) | ~5 GB | Separate VRAM pool via `--gpus all` |
+
+> **Gaming Mode**: all models unloaded → 0 GB used by 0Lith → full VRAM free for games.
+
+## Prerequisites
+
+- [Ollama](https://ollama.com) **≥ 0.16.1** — required for RTX 5070 Ti / Blackwell GPU support (0.15.x silently falls back to CPU)
+- [Docker Desktop](https://docker.com) — for Qdrant vector DB and Pyrolith sandbox
+- [Node.js](https://nodejs.org) ≥ 18
+- [Rust](https://rustup.rs) (for Tauri compilation)
+- **Python 3.12** — not 3.13+, Kuzu graph DB is incompatible
+
+## Quickstart
 
 ```bash
-# 1. Cloner le repo
+# 1. Clone the repository
 git clone https://github.com/ISkyCraftI/0Lith.git
 cd 0Lith
+```
 
-# 2. Télécharger les modèles Ollama
-ollama pull qwen3:1.7b          # Hodolith — dispatcher
-ollama pull qwen3:14b           # Monolith — orchestrateur
-ollama pull qwen3-coder:30b     # Aerolith — codeur
+```bash
+# 2. Pull Ollama models
+ollama pull qwen3:1.7b               # Hodolith — dispatcher
+ollama pull qwen3:14b                # Monolith — orchestrator
+ollama pull qwen3-coder:30b          # Aerolith — coder
+ollama pull qwen3-embedding:0.6b     # Embeddings (1024 dims, code-aware)
+ollama pull hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF  # Cryolith
+```
 
-# Modèle d'embeddings
-ollama pull qwen3-embedding:0.6b    # Embeddings 1024 dims, code-aware
-
-# Modèles spécialisés (cybersec)
-ollama pull hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF   # Cryolith
-
-# Pyrolith — isolé dans Docker (port 11435)
-docker run -d --name pyrolith -p 11435:11434 --gpus all ollama/ollama
-docker exec pyrolith ollama pull deephat/DeepHat-V1-7B
-
-# 3. Lancer Qdrant
+```bash
+# 3. Start Docker services
+# Qdrant vector database
 docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
   -v ~/.qdrant/storage:/qdrant/storage qdrant/qdrant
 
-# 4. Installer les dépendances Python
+# Pyrolith — red team agent (isolated Ollama instance)
+docker run -d --name pyrolith -p 11435:11434 --gpus all ollama/ollama
+docker exec pyrolith ollama pull deephat/DeepHat-V1-7B
+```
+
+```bash
+# 4. Install Python dependencies and initialize memory
 cd 0lith-desktop/py-backend
 pip install -r requirements.txt
-
-# 5. Initialiser la mémoire
 python olith_memory_init.py
+```
 
-# 6. Installer les dépendances frontend et lancer
+```bash
+# 5. Install frontend dependencies and launch
 cd ..
 npm install
 npm run tauri dev
 ```
 
-## Configuration Ollama recommandée
+## Ollama Configuration
 
-Pour optimiser le chargement rotatif des modèles sur 16 Go de VRAM :
+Recommended environment variables for rotating model loading on 16 GB VRAM:
 
 ```bash
-# Max 2 modèles en VRAM simultanément
-export OLLAMA_MAX_LOADED_MODELS=2
-
-# Libérer la VRAM après 5 min d'inactivité
-export OLLAMA_KEEP_ALIVE=5m
-
-# Un seul thread par modèle (économise la VRAM)
-export OLLAMA_NUM_PARALLEL=1
-
-# Attention flash + cache KV quantifié
-export OLLAMA_FLASH_ATTENTION=true
-export OLLAMA_KV_CACHE_TYPE=q8_0
+OLLAMA_MAX_LOADED_MODELS=2     # Max 2 models in VRAM simultaneously
+OLLAMA_KEEP_ALIVE=5m           # Release VRAM after 5 min idle
+OLLAMA_NUM_PARALLEL=1          # One thread per model (saves VRAM)
+OLLAMA_FLASH_ATTENTION=true    # Flash attention
+OLLAMA_KV_CACHE_TYPE=q8_0      # Quantized KV cache
 ```
 
-## Stack technique
+## Tech Stack
 
-| Couche | Technologie | Rôle |
-|--------|-------------|------|
-| Desktop | Tauri 2 (Rust) | Fenêtre native, sidecar Python, IPC |
-| Frontend | Svelte 5 (runes) | UI réactive, chat, sidebar |
-| Backend | Python 3.12 | Agents, routage, mémoire, outils |
-| Inférence | Ollama (llama.cpp) | Modèles GGUF quantifiés Q4_K_M |
+| Layer | Technology | Role |
+|-------|-----------|------|
+| Desktop | Tauri 2 (Rust) | Native window, Python sidecar, IPC |
+| Frontend | Svelte 5 (runes) | Reactive UI, chat, sidebar |
+| Backend | Python 3.12 | Agents, routing, memory, tools |
+| Inference | Ollama (llama.cpp) | Quantized GGUF models Q4_K_M |
 | Embeddings | qwen3-embedding:0.6b | #1 MTEB Multilingual, 1024 dims, code-aware |
-| Mémoire | Mem0 + Qdrant | Extraction de faits, recherche sémantique |
-| Graphe | Kuzu (optionnel) | Knowledge graph, relations multi-hop |
-| Isolation | Docker | Sandbox pour l'agent offensif |
-| Styling | Tailwind + bits-ui | Composants UI, dark theme |
+| Memory | Mem0 + Qdrant | Fact extraction, semantic search |
+| Graph | Kuzu (optional) | Knowledge graph, multi-hop relations |
+| Isolation | Docker | Sandbox for the offensive agent |
+| Styling | TailwindCSS 4 + bits-ui | UI components, dark theme |
 
-## Fonctionnalités actuelles (v0.1)
+## Features (v0.1)
 
-- [x] Chat multi-agents avec routage automatique via Hodolith
-- [x] Streaming des réponses en temps réel
-- [x] Mémoire partagée entre agents (Mem0 + Qdrant + qwen3-embedding:0.6b)
-- [x] Persistance des conversations (JSON, `~/.0lith/chats/`)
-- [x] Historique des sessions dans la sidebar
-- [x] Sandbox filesystem (validation de chemin, protection symlink)
-- [x] Cancel gracieux des réponses (IPC + fallback kill)
-- [x] Retry avec backoff exponentiel (Ollama, Mem0)
-- [x] Filtrage mémoire intelligent (ignore les messages triviaux)
+- [x] Multi-agent chat with automatic routing via Hodolith
+- [x] Real-time streaming responses
+- [x] Shared memory across agents (Mem0 + Qdrant + qwen3-embedding:0.6b)
+- [x] Session persistence (JSON, `~/.0lith/chats/`)
+- [x] Session history in the sidebar
+- [x] Sandboxed filesystem tools (path validation, symlink protection)
+- [x] Graceful response cancellation (IPC + fallback kill)
+- [x] Exponential backoff retry (Ollama, Mem0)
+- [x] Intelligent memory filtering (ignores trivial messages)
 - [x] Cross-platform system info (psutil)
-- [x] Indicateurs de statut : Backend, Ollama, Qdrant
-- [x] Gaming Mode (libération complète de la VRAM)
-- [x] System Tray (background, notifications, menu Gaming Mode)
-- [x] Background loop proactif (olith_watcher.py, file watcher, suggestions)
-- [x] Outils sandboxés pour agents (lecture/recherche de fichiers, system info)
+- [x] Status indicators: Backend, Ollama, Qdrant
+- [x] Gaming Mode (full VRAM release)
+- [x] System Tray (background persistence, notifications, Gaming Mode menu)
+- [x] Proactive background loop (olith_watcher.py, file watcher, suggestions panel)
+- [x] Sandboxed tools for agents (file read/search, system info)
 
 ## Roadmap
 
 ```
-FAIT ────────────────────────────────────
-✅ Phase 0 : Prototype IPC Svelte ↔ Tauri ↔ Python
-✅ Phase 1 : Backend Python complet (agents, routage Hodolith, Mem0/Qdrant)
-✅ Phase 2 : Interface chat (sidebar agents, streaming, markdown, dark theme)
-✅ Phase 3 : Gaming Mode (déchargement VRAM, toggle sidebar + tray)
+DONE ────────────────────────────────────────
+✅ Phase 0 : Svelte ↔ Tauri ↔ Python IPC prototype
+✅ Phase 1 : Full Python backend (agents, Hodolith routing, Mem0/Qdrant)
+✅ Phase 2 : Chat interface (agent sidebar, streaming, markdown, dark theme)
+✅ Phase 3 : Gaming Mode (VRAM unload, sidebar + tray toggle)
 ✅ Phase 3 : System Tray (background, notifications, Show/Hide/Quit)
-✅ Phase 3 : Background loop (olith_watcher.py, file watcher, suggestions)
-✅ Sécurité : sandbox filesystem, lane queue, cancel IPC, retry + backoff
-✅ Persistance : sessions JSON, historique sidebar
+✅ Phase 3 : Background loop (file watcher, proactive suggestions)
+✅ Security : filesystem sandbox, lane queue, IPC cancel, retry + backoff
+✅ Persistence : JSON sessions, history sidebar
 
-COURT TERME ─────────────────────────────
-⬜ Shadow Thinking (anticipation proactive via Mem0)
-✅ OLithEye animé (logo SVG dynamique, couleur par agent)
-⬜ Onglets sidebar (Agents / Historique séparés)
-⬜ MCP Server pour Zed.dev
+SHORT TERM ──────────────────────────────────
+⬜ Shadow Thinking (proactive memory anticipation via Mem0)
+⬜ OLithEye animated SVG (dynamic logo, color per agent)
+⬜ Sidebar tabs (Agents / History separated)
+⬜ MCP Server for Zed.dev
 
-MOYEN TERME ─────────────────────────────
-⬜ Agents enfichables via YAML (dock architecture)
-⬜ Dock Game Dev (Storylith, Artlith, Gamelith)
-⬜ Dock Personnel (Schedulith, Econolith)
-⬜ Sparring nocturne Pyrolith vs Cryolith
+MEDIUM TERM ─────────────────────────────────
+⬜ Pluggable agents via YAML (dock architecture)
+⬜ Game Dev dock (Storylith, Artlith, Gamelith)
+⬜ Personal dock (Schedulith, Econolith)
+⬜ Overnight sparring: Pyrolith vs Cryolith on CVEs
 
-LONG TERME ──────────────────────────────
+LONG TERM ───────────────────────────────────
 ⬜ Google Takeout ingestion pipeline
-⬜ Calendrier + données santé
-⬜ Fine-tuning LoRA par agent (QLoRA via Unsloth)
-⬜ Réseau multi-machine (Tailscale)
-⬜ Migration vers MemOS (quand mature)
-⬜ BCI (Brain Computer Interface)
+⬜ Calendar + health data integration
+⬜ Per-agent LoRA fine-tuning (QLoRA via Unsloth)
+⬜ Multi-machine network (Tailscale)
+⬜ MemOS migration (when mature)
 ```
 
-## Philosophie
+## Philosophy
 
-**Offline first** — Tout tourne en local. Pas de cloud. Pas de clé API. Pas de dépendance réseau.
+**Offline first** — Everything runs locally. No cloud. No API keys. No network dependency.
 
-**La VRAM est sacrée** — Le gaming a toujours la priorité. 0Lith se retire silencieusement quand tu lances un jeu.
+**VRAM is sacred** — Gaming always has priority. 0Lith retreats silently when you launch a game.
 
-**La mémoire est le fossé** — L'avantage de 0Lith sur Claude ou GPT n'est pas l'intelligence brute, c'est qu'après des mois d'utilisation il connaît tes patterns, ton style, et ton contexte.
+**Memory is the moat** — 0Lith's advantage over Claude or GPT isn't raw intelligence — it's that after months of use, it knows your patterns, your style, and your context.
 
-**Chaque mois est utilisable** — Jamais "en construction". Mois 1 = bon chat. Mois 2 = suggestions proactives. Mois 3 = agents enfichables. On peut s'arrêter à tout moment et c'est déjà utile.
+**Each month is usable** — Never "under construction". Month 1 = good chat. Month 2 = proactive suggestions. Month 3 = pluggable agents. Stop at any point and it's already useful.
 
-**Niveau 2 jamais sans permission** — Le système observe et suggère, mais n'agit jamais de manière autonome sur des actions critiques.
+**Level 2 never without permission** — The system observes and suggests, but never acts autonomously on critical actions.
 
-## Contribuer
+## Contributing
 
-Le projet est en alpha et développé en solo pour l'instant. Les issues et suggestions sont les bienvenues.
+The project is in alpha and developed solo for now. Issues and suggestions are welcome.
 
-## Licence
+**License note**: 0Lith is AGPL-3.0. Commercial use or distribution requires either compliance with AGPL (open-sourcing your modifications) or a separate commercial license agreement.
 
-MIT
+## License
+
+[GNU Affero General Public License v3.0](LICENSE) — Copyright (C) 2025 ISkyCraftI
 
 ---
 
 <p align="center">
-  <em>Forgé dans la pierre, affûté par le feu, protégé par la glace.</em>
+  <em>Forged in stone, sharpened by fire, protected by ice.</em>
 </p>

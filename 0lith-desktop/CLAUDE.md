@@ -157,7 +157,8 @@ Full research: `Reflexions/0Lith_Memory_Architecture.md` and `Reflexions/0Lith_E
 - [x] Phase 3: Chat persistence (JSON history, `~/.0lith/chats/`, session sidebar)
 - [ ] Phase 3: Shadow Thinking (proactive memory preparation) — **HIGH PRIORITY**
 - [x] Launch: Repo cleanup — gitignore enhanced, Reflexions/ staged, root CLAUDE.md added
-- [ ] Launch: AGPL-3.0 license, English README, demo video
+- [x] Launch: AGPL-3.0 license added (LICENSE at root), English README (README.md), French copy kept as README.fr.md
+- [ ] Launch: demo video
 - [ ] Launch: One working red/blue team end-to-end demo flow
 - [ ] Feature: Conversation deletion + multi-select
 - [ ] Feature: Sidebar tabs (Agents / History separated)
@@ -175,8 +176,8 @@ Immediate non-code priorities (from `Reflexions/Matrice Einsenhower.md`):
 
 **This week:**
 1. ~~Repo cleanup: fix `.gitignore`, remove `__pycache__`/`.obsidian` from tracking~~ **DONE**
-2. Add AGPL-3.0 LICENSE file
-3. English README: pitch, demo GIF, hardware requirements, 5-step quickstart
+2. ~~Add AGPL-3.0 LICENSE file~~ **DONE**
+3. ~~English README: pitch, demo GIF, hardware requirements, 5-step quickstart~~ **DONE** (README.fr.md kept as French copy)
 4. One working end-to-end demo (red OR blue team flow)
 
 **Next 2-4 weeks:**
