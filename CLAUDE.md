@@ -69,7 +69,7 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 
 ### This Week (Urgent + Important)
 1. ~~**Repo cleanup**: fix `.gitignore` (remove `__pycache__`, `.obsidian` from tracking), clean cached files~~ **DONE** — gitignore enhanced, Reflexions/ staged, root CLAUDE.md committed
-2. ~~**English README**: pitch, demo GIF, hardware requirements, 5-step quickstart, roadmap~~ **DONE** — README.md rewritten in English, README.fr.md kept as French copy
+2. ~~**English README**: pitch, demo GIF, hardware requirements, 5-step quickstart, roadmap~~ **DONE** — README.md rewritten in English, README.fr.md kept as French copy (with 🇫🇷/🇬🇧 links)
 3. ~~**AGPL-3.0 license**: add LICENSE file~~ **DONE** — LICENSE added at root
 4. **One working end-to-end demo**: red team OR blue team flow that can be shown
 
@@ -80,7 +80,7 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 8. r/LocalLLaMA launch post preparation
 
 ### Feature Priorities (by impact)
-1. Shadow Thinking (proactive memory anticipation) — 2-3 days
+1. Shadow Thinking (proactive memory anticipation) — 2-3 days *(olith_watcher.py shadow loop exists; Mem0 pre-answer storage needs wiring to chat)*
 2. Conversation deletion + multi-select — 0.5 day
 3. Sidebar tabs (Agents / History) — 1 day
 4. OLithEye animated SVG — 1-2 days

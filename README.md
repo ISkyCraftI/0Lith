@@ -18,6 +18,10 @@
   <img src="https://img.shields.io/badge/GPU-RTX%205070%20Ti%2016%20GB-green" />
 </p>
 
+<p align="center">
+  <a href="README.fr.md">🇫🇷 Lire en français</a>
+</p>
+
 ---
 
 ## What is 0Lith?
