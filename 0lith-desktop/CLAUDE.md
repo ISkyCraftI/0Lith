@@ -174,7 +174,10 @@ Full research: `Reflexions/0Lith_Memory_Architecture.md` and `Reflexions/0Lith_E
 ### 🟠 High — Next sprint
 - [x] Frontend: Custom TitleBar — decorations: false, Chat/Arena tab navigation, window controls (─ □ ✕)
 - [x] Launch: Arena — SQL Injection sparring demo (Pyrolith vs Cryolith, 5 rounds + review, live streaming)
-- [x] Arena UX polish — stop button, tab lock (flash red), elapsed chrono, per-move timer + expandable details, ARENA sidebar badge, InputBar lock, collapsible log strip, per-session `.jsonl` file log in `~/.0lith/arena_logs/`
+- [x] Arena UX v1 — stop button, tab lock (flash red), elapsed chrono, per-move timer + expandable details, ARENA sidebar badge, InputBar lock, collapsible log strip, per-session `.jsonl` file log in `~/.0lith/arena_logs/`
+- [x] Arena v2 robustesse — `_get_timeout()` adaptatif par modèle (DeepHat/Foundation-Sec=300s), `_llm_call_with_fallback()` retry auto qwen3:14b, `_build_context(max_rounds=2)`, séquences forcées, round fields dans les events, `num_ctx=2048`, session timeout 30 min
+- [x] Arena v2 UI — scenario pills, round dots (● ● ○ ○ ○), symboles Unicode (◉ ⚔ ■ ✦ ◈ ▲), durée colorée, loading animation, badge VICTOIRE, bouton Nouvelle session, export log tooltip, `ArenaResult` localStorage
+- [x] Accessibility — aria-labels InputBar (Annuler/Envoyer), ChatMessage (feedback), OLithEye tabindex fix
 - [ ] Backend: Standardize agent outputs to strict JSON schema (eliminates frontend parse bugs)
 - [ ] Frontend: Aerolith loading state UI ("Aerolith réfléchit… 3-5 min", progress bar, cancel)
 - [ ] Backend: Clarify Monolith/Aerolith boundary in Hodolith routing prompt (Monolith plans/reasons, Aerolith writes)
@@ -263,9 +266,10 @@ Custom title bar replacing native OS decorations (`"decorations": false` in `tau
 
 Live red-vs-blue IPC sparring demo: Pyrolith (Red) attacks, Cryolith (Blue) defends, 5 rounds + weakness review.
 
-**IPC flow**: `frontend.send({command:"arena"}, 600_000, onStream)` — same streaming pattern as chat.
+**IPC flow**: `frontend.send({command:"arena"}, 1_800_000, onStream)` — same streaming pattern as chat. 30 min budget (slow models ~25 min typical).
 - Per-move events: `{"id":"…", "status":"arena", "move":{...}, "score":{...}}` — non-resolving (calls `onStream`)
 - Final: `{"id":"…", "status":"ok", "score_red":N, "score_blue":N, "review":{...}}` — resolves promise
+- Move events include `round` (1-5) and `round_total` (5) fields — used by store `getRoundNum()` and frontend round dots
 
 **Arena files**:
 | File | Role |
@@ -290,17 +294,28 @@ Blue: MONITOR=3, ALERT=5,  BLOCK=15,  PATCH=10,  ISOLATE=20
 
 **Key gotchas**:
 - `status:"arena"` added to non-resolving list in `pythonBackend.svelte.ts` (alongside `"streaming"`, `"routing"`)
-- Arena uses `_chat_lock` — chat is blocked while arena runs (expected; ~2-5 min session)
-- `_parse_move()` uses regex + keyword scan + fallback — LLM JSON failures never crash the UI
-- **Svelte 5 snippets** must use `{@render MoveRow({ move })}` — NOT `<MoveRow {move} />` (component syntax) — silent render failure otherwise
+- Arena uses `_chat_lock` — chat is blocked while arena runs (expected; ~25 min typical with slow models)
+- `_parse_move(forced_type)` uses regex patterns + fallback only — **keyword scan removed** (caused type pollution); type always set via `RED_SEQUENCE[round-1]` / `BLUE_SEQUENCE[round-1]` regardless of LLM output
+- **Forced sequences**: `RED_SEQUENCE = ["RECON","EXPLOIT","EXPLOIT","PIVOT","DATA"]`, `BLUE_SEQUENCE = ["MONITOR","ALERT","BLOCK","PATCH","ISOLATE"]` — ensures narrative progression per round
+- **Context window**: `_build_context(max_rounds=2)` injects only last 4 lines — prevents few-shot contamination where models continue the combat log sequence
+- **Adaptive timeouts**: `_get_timeout(model)` — DeepHat/Foundation-Sec=300s (regularly 120-220s), qwen3:14b=180s, qwen3=120s, unknown=240s; `num_ctx=2048` for arena calls (prompts are short, smaller ctx = faster inference)
+- **Auto-fallback**: `_llm_call_with_fallback()` — if stripped response < 20 chars → auto-retry with `qwen3:14b` (catches Foundation-Sec generating `#` in 1-2s); exceptions in `_call_pyrolith`/`_call_cryolith` also fall through to qwen3:14b with `type(e).__name__` in log
+- **Model overrides**: `ARENA_RED_MODEL = os.environ.get("ARENA_RED_MODEL", PYROLITH_MODEL)` — set env var to `qwen3:14b` to bypass slow models without code change
+- **Session timeout**: `1_800_000ms` (30 min) in `arena.svelte.ts` — covers ~25 min typical runs; old 600s caused premature rejection at round 4
+- **Svelte 5 snippets** must use `{@render MoveRow({ move })}` — NOT `<MoveRow {move} />` — silent render failure otherwise
 - **Stop button** sends `{command:"cancel"}` → `cmd_cancel()` sets `_cancel_event` → arena loop breaks between rounds
 - **Tab lock**: `App.svelte` derives `arenaLocked` from arena phase; passed to `TitleBar` which flashes "Chat" tab red and blocks navigation while arena is `running|review`
 - **InputBar lock**: orange notice banner + disabled textarea/button while arena is active; uses same `arenaStore.getPhase()` derivation
-- **ARENA badge**: sidebar shows orange `ARENA` badge (instead of DISK/GPU) for Pyrolith + Cryolith while `arenaActive`; CSS `.arena-badge` in Sidebar.svelte
-- **Per-move timing**: `duration_s` (float, seconds from `time.time()`) + `details` (payload/technical text) included in each move event; frontend shows `Xs` timer badge and `›` expand chevron button; click expands a monospace details panel
-- **Error resilience**: each LLM call wrapped in `try/except`; red team failure breaks the round + logs to file; blue team failure is non-fatal (continues to next round); review call failures fall back to `"Analyse indisponible."`
+- **ARENA badge**: sidebar shows orange `ARENA` badge (instead of DISK/GPU) for Pyrolith + Cryolith while `arenaActive`
+- **Per-move timing**: `duration_s` float + `details` payload + `round`/`round_total` int in each move event; frontend shows `Xs` color-coded duration (green <5s, orange 5-30s, red >30s), `R{n}` round prefix, Unicode type symbol, `›` expand button
+- **Round progress dots**: `getRoundNum()` / `getRoundTotal()` from store; header shows `● ● ○ ○ ○` — active dot blinks, completed dots alternate red/blue
+- **Loading animation**: CSS `dots-anim` shows "Pyrolith génère son attaque..." or "Cryolith génère sa réponse..." in the active panel; derived from `redMoves.length > blueMoves.length`
+- **ArenaResult persistence**: on `done`, store builds `ArenaResult{red, blue, duration_s, winner, scenario, timestamp}` → saved to `localStorage` key `arena_last_result`; loaded on module init; exposed via `getLastResult()`; displayed as "Dernière session" on idle screen
+- **Scenario selector**: idle screen has pills — SQL Injection (active), Phishing + Privilege Escalation (disabled, "Bientôt" badge); button label is dynamic `"Lancer {scenario}"`
+- **Review section**: `VICTOIRE` badge on winner card (red or blue), large centered score `Red N — Blue N`, "Nouvelle session" button (resets + restarts), "Exporter le log" button shows `~/.0lith/arena_logs/` path in tooltip (3s)
+- **Error resilience**: each LLM call wrapped in `try/except`; red team failure breaks the round + logs to file; blue team failure is non-fatal (continues to next round); review failures fall back to `"Analyse indisponible."`
 - **File log**: each arena session writes `~/.0lith/arena_logs/arena_YYYYMMDD_HHMMSS_sql_injection.jsonl` — one JSON line per event (start / move / review / error / complete); includes `raw` LLM response (truncated to 3000 chars) for post-mortem debugging
-- **Collapsible log strip**: `ArenaView.svelte` has a `"Log de combat"` toggle bar between panels and review section; shows all moves as `HH:MM:SS  RED   [TYPE   ]  message [Xs]` in a scrollable monospace `<pre>`; built from `arena.getCombatLog()` in the store
+- **Collapsible log strip**: `ArenaView.svelte` has a `"Log de combat"` toggle; shows `HH:MM:SS R{n}  RED  [TYPE   ]  message [Xs]` in monospace `<pre>`; built from `arena.getCombatLog()`
 
 ## File Structure
 ```

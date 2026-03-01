@@ -176,7 +176,7 @@
                             if (e.key === "Enter") submitReason();
                         }}
                     />
-                    <button class="reason-submit" onclick={submitReason}>
+                    <button class="reason-submit" aria-label="Envoyer le feedback" onclick={submitReason}>
                         <svg
                             width="12"
                             height="12"

@@ -78,7 +78,7 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 1. ~~**Repo cleanup**: fix `.gitignore` (remove `__pycache__`, `.obsidian` from tracking), clean cached files~~ **DONE** — gitignore enhanced, Reflexions/ staged, root CLAUDE.md committed
 2. ~~**English README**: pitch, demo GIF, hardware requirements, 5-step quickstart, roadmap~~ **DONE** — README.md rewritten in English, README.fr.md kept as French copy (with 🇫🇷/🇬🇧 links)
 3. ~~**AGPL-3.0 license**: add LICENSE file~~ **DONE** — LICENSE added at root
-4. ~~**One working end-to-end demo**: red team OR blue team flow~~ **DONE** — Arena: SQL Injection sparring (Pyrolith vs Cryolith, 5 rounds, live streaming, score + review) + UX polish: stop button, tab lock, per-move timer + expandable details, ARENA sidebar badge, session log files (`~/.0lith/arena_logs/`)
+4. ~~**One working end-to-end demo**: red team OR blue team flow~~ **DONE** — Arena v2: SQL Injection sparring (5 rounds, live streaming, score + review) + UX v2: scenario selector, round progress dots, Unicode badges, loading animation, winner badge, export log + robustesse: timeouts adaptatifs par modèle, fallback automatique qwen3:14b, séquences de types forcées, contexte réduit (max 2 rounds), session 30 min
 
 ### Next 2-4 Weeks (Important)
 5. Demo video 2-3 min (key content for r/LocalLLaMA, HN)

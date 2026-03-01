@@ -14,6 +14,7 @@ Log files: ~/.0lith/arena_logs/arena_YYYYMMDD_HHMMSS.jsonl
 """
 
 import json
+import os
 import re
 import time
 import requests
@@ -26,12 +27,21 @@ from olith_shared import strip_think_blocks, log_info, log_warn
 # ── Constants ──────────────────────────────────────────────────────────────
 
 PYROLITH_URL = "http://localhost:11435"
-PYROLITH_MODEL = "deephat/DeepHat-V1-7B:latest"
+PYROLITH_MODEL = "deephat/DeepHat-V1-7B:latest"  # Docker :11435
 CRYOLITH_MODEL = "hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF:latest"
 FALLBACK_MODEL = "qwen3:14b"
 
+# Arena-quality override: use Qwen3:14b when specialized models produce garbage output
+# Set env vars ARENA_RED_MODEL / ARENA_BLUE_MODEL to override
+ARENA_RED_MODEL  = os.environ.get("ARENA_RED_MODEL",  PYROLITH_MODEL)
+ARENA_BLUE_MODEL = os.environ.get("ARENA_BLUE_MODEL", CRYOLITH_MODEL)
+
 MOVE_TYPES_RED = ["RECON", "EXPLOIT", "SUCCESS", "PIVOT", "DATA"]
 MOVE_TYPES_BLUE = ["MONITOR", "ALERT", "BLOCK", "PATCH", "ISOLATE"]
+
+# Forced type sequence per round - ensures narrative progression
+RED_SEQUENCE  = ["RECON", "EXPLOIT", "EXPLOIT", "PIVOT", "DATA"]
+BLUE_SEQUENCE = ["MONITOR", "ALERT", "BLOCK", "PATCH", "ISOLATE"]
 
 BADGE_COLORS = {
     "RECON":   "#475569",
@@ -96,36 +106,69 @@ def _pyrolith_available() -> bool:
         return False
 
 
+def _get_timeout(model: str) -> int:
+    """Return appropriate timeout in seconds for a given model."""
+    if "DeepHat" in model or "deephat" in model.lower():
+        return 300   # regularly takes 125s+
+    if "Foundation-Sec" in model or "fdtn-ai" in model:
+        return 300   # regularly takes 120-220s
+    if "qwen3:14b" in model:
+        return 180
+    if "qwen3" in model:
+        return 120
+    return 240  # safe fallback for unknown models
+
+
+def _raw_call(messages: list[dict], model: str, is_docker: bool = False) -> str:
+    """Low-level LLM call with adaptive timeout. num_ctx=2048 kept small — arena prompts are short."""
+    timeout = _get_timeout(model)
+    if is_docker:
+        return chat_docker_pyrolith(model, messages, timeout=timeout, num_ctx=2048)
+    return chat_with_ollama(model, messages, timeout=timeout, num_ctx=2048)
+
+
+def _llm_call_with_fallback(messages: list[dict], model: str, is_docker: bool = False) -> str:
+    """LLM call with automatic fallback to qwen3:14b if response too short (< 20 chars)."""
+    raw = _raw_call(messages, model, is_docker)
+    stripped = strip_think_blocks(raw).strip()
+    if len(stripped) < 20 and model != FALLBACK_MODEL:
+        log_warn("arena", f"Réponse trop courte ({len(stripped)} chars) depuis {model}, fallback qwen3:14b")
+        raw = _raw_call(messages, FALLBACK_MODEL, is_docker=False)
+    return raw
+
+
 def _call_pyrolith(messages: list[dict]) -> str:
-    """Call Pyrolith (Docker). Falls back to qwen3:14b if Docker is unavailable."""
+    """Call Pyrolith (Docker). Falls back to qwen3:14b if Docker is unavailable or response too short."""
     if _pyrolith_available():
         try:
-            return chat_docker_pyrolith(PYROLITH_MODEL, messages, timeout=120)
+            return _llm_call_with_fallback(messages, ARENA_RED_MODEL, is_docker=True)
         except Exception as e:
-            log_warn("arena", f"Pyrolith Docker failed ({e}), falling back to qwen3:14b")
+            log_warn("arena", f"Pyrolith failed ({type(e).__name__}: {e}), falling back to qwen3:14b")
 
-    # Fallback: use Monolith model with red-team framing
     log_info("arena", "Using qwen3:14b as Pyrolith fallback")
-    return chat_with_ollama(FALLBACK_MODEL, messages, timeout=120, num_ctx=4096)
+    return _raw_call(messages, FALLBACK_MODEL, is_docker=False)
 
 
 def _call_cryolith(messages: list[dict]) -> str:
-    """Call Cryolith (Foundation-Sec-8B). Falls back to qwen3:14b on failure."""
+    """Call Cryolith (Foundation-Sec-8B). Falls back to qwen3:14b on failure or short response."""
     try:
-        return chat_with_ollama(CRYOLITH_MODEL, messages, timeout=120, num_ctx=4096)
+        return _llm_call_with_fallback(messages, ARENA_BLUE_MODEL, is_docker=False)
     except Exception as e:
-        log_warn("arena", f"Cryolith model failed ({e}), falling back to qwen3:14b")
-        return chat_with_ollama(FALLBACK_MODEL, messages, timeout=120, num_ctx=4096)
+        log_warn("arena", f"Cryolith failed ({type(e).__name__}: {e}), falling back to qwen3:14b")
+        return _raw_call(messages, FALLBACK_MODEL, is_docker=False)
 
 
-def _parse_move(response: str, valid_types: list[str]) -> tuple[str, str, str]:
+def _parse_move(response: str, valid_types: list[str], forced_type: str = None) -> tuple[str, str, str]:
     """
     Extract (type, message, details) from LLM response.
-    Tries JSON extraction first, then keyword scan, then first line fallback.
+    forced_type: if provided, always use this type regardless of LLM output.
     Returns: (move_type, short_message, technical_details)
     """
     clean = strip_think_blocks(response).strip()
     details = ""
+
+    # Determine the type to use
+    effective_type = forced_type if forced_type else None
 
     # Pattern 1: {"type": "X", "message": "Y", "payload": "Z"}
     match = re.search(
@@ -135,14 +178,15 @@ def _parse_move(response: str, valid_types: list[str]) -> tuple[str, str, str]:
     if match:
         t = match.group(1).upper().strip()
         m = match.group(2).strip()
-        if t in valid_types:
-            # Also try to extract payload/details
-            payload_match = re.search(r'"payload"\s*:\s*"([^"]+)"', clean)
-            if payload_match:
-                details = payload_match.group(1).strip()[:300]
-            return t, m[:160], details
+        if not effective_type and t in valid_types:
+            effective_type = t
+        # Extract payload/details
+        payload_match = re.search(r'"payload"\s*:\s*"([^"]+)"', clean)
+        if payload_match:
+            details = payload_match.group(1).strip()[:300]
+        return effective_type or valid_types[0], m[:160], details
 
-    # Pattern 2: "message": "Y", "type": "X" (reversed order)
+    # Pattern 2: reversed order
     match = re.search(
         r'\{[^{}]*?"message"\s*:\s*"([^"]+)"[^{}]*?"type"\s*:\s*"([^"]+)"',
         clean, re.DOTALL
@@ -150,31 +194,26 @@ def _parse_move(response: str, valid_types: list[str]) -> tuple[str, str, str]:
     if match:
         m = match.group(1).strip()
         t = match.group(2).upper().strip()
-        if t in valid_types:
-            payload_match = re.search(r'"payload"\s*:\s*"([^"]+)"', clean)
-            if payload_match:
-                details = payload_match.group(1).strip()[:300]
-            return t, m[:160], details
+        if not effective_type and t in valid_types:
+            effective_type = t
+        payload_match = re.search(r'"payload"\s*:\s*"([^"]+)"', clean)
+        if payload_match:
+            details = payload_match.group(1).strip()[:300]
+        return effective_type or valid_types[0], m[:160], details
 
-    # Pattern 3: keyword scan in full text
-    for t in valid_types:
-        if t in clean.upper():
-            lines = [ln.strip() for ln in clean.split("\n") if ln.strip()]
-            msg = lines[0][:160] if lines else f"{t} action performed"
-            # Use remaining lines as details (skip first)
-            details = " ".join(lines[1:3])[:300] if len(lines) > 1 else ""
-            return t, msg, details
-
-    # Fallback: use first valid type + first line of response
-    lines = [ln.strip() for ln in clean.split("\n") if ln.strip()]
-    msg = lines[0][:160] if lines else "Action performed"
-    details = " ".join(lines[1:3])[:300] if len(lines) > 1 else ""
-    return valid_types[0], msg, details
+    # No valid JSON found - extract best available message from raw text
+    # REMOVED: keyword scan (level 3) - was causing type pollution
+    lines = [ln.strip() for ln in clean.split("\n")
+             if ln.strip() and not ln.strip().startswith(('#', '```', '{', '[', '|', '-'))]
+    msg = lines[0][:160] if lines else "Action effectuée"
+    details = " | ".join(lines[1:3])[:300] if len(lines) > 1 else ""
+    return effective_type or valid_types[0], msg, details
 
 
 def _emit_move(emit, team: str, move_type: str, message: str,
                score_red: int, score_blue: int,
-               duration_s: float = 0.0, details: str = "") -> None:
+               duration_s: float = 0.0, details: str = "",
+               round_num: int = 0) -> None:
     """Emit a structured arena move event to the frontend."""
     move: dict = {
         "team": team,
@@ -183,6 +222,8 @@ def _emit_move(emit, team: str, move_type: str, message: str,
         "timestamp": _now(),
         "badge_color": BADGE_COLORS.get(move_type, "#555"),
         "duration_s": round(duration_s, 1),
+        "round": round_num,
+        "round_total": 5,
     }
     if details:
         move["details"] = details
@@ -196,6 +237,17 @@ def _emit_move(emit, team: str, move_type: str, message: str,
 def _emit_phase(emit, phase: str, **kwargs) -> None:
     """Emit a phase-change event (start, review_start, complete)."""
     emit({"status": "arena", "phase": phase, **kwargs})
+
+
+def _build_context(combat_log: list[str], max_rounds: int = 2) -> str:
+    """
+    Returns a minimal context string showing only the last N rounds.
+    Avoids few-shot contamination where the model copies/extends the log pattern.
+    """
+    if not combat_log:
+        return "Début de la session."
+    recent = combat_log[-(max_rounds * 2):]  # last N rounds (red + blue per round)
+    return "\n".join(recent)
 
 
 # ── Arena Prompts ──────────────────────────────────────────────────────────
@@ -304,7 +356,7 @@ def run_arena_sql_injection(emit, cancel_event=None) -> dict:
             _logj(log_path, {"event": "cancelled", "round": round_num, "ts": _now()})
             break
 
-        context = "\n".join(combat_log) if combat_log else "Début de la session."
+        context = _build_context(combat_log)
 
         # — Red move (Pyrolith) —
         log_info("arena", f"Round {round_num}: Pyrolith attacking...")
@@ -316,10 +368,10 @@ def run_arena_sql_injection(emit, cancel_event=None) -> dict:
             t0 = time.time()
             red_raw = _call_pyrolith(red_messages)
             red_duration = time.time() - t0
-            red_type, red_msg, red_details = _parse_move(red_raw, MOVE_TYPES_RED)
+            red_type, red_msg, red_details = _parse_move(red_raw, MOVE_TYPES_RED, forced_type=RED_SEQUENCE[round_num - 1])
             score_red += SCORE_TABLE.get(red_type, 3)
             _emit_move(emit, "red", red_type, red_msg, score_red, score_blue,
-                       duration_s=red_duration, details=red_details)
+                       duration_s=red_duration, details=red_details, round_num=round_num)
             combat_log.append(f"R{round_num} RED  [{red_type}] {red_msg}")
             log_info("arena", f"Red: [{red_type}] {red_msg} ({red_duration:.1f}s)")
             _logj(log_path, {
@@ -352,10 +404,10 @@ def run_arena_sql_injection(emit, cancel_event=None) -> dict:
             t0 = time.time()
             blue_raw = _call_cryolith(blue_messages)
             blue_duration = time.time() - t0
-            blue_type, blue_msg, blue_details = _parse_move(blue_raw, MOVE_TYPES_BLUE)
+            blue_type, blue_msg, blue_details = _parse_move(blue_raw, MOVE_TYPES_BLUE, forced_type=BLUE_SEQUENCE[round_num - 1])
             score_blue += SCORE_TABLE.get(blue_type, 3)
             _emit_move(emit, "blue", blue_type, blue_msg, score_red, score_blue,
-                       duration_s=blue_duration, details=blue_details)
+                       duration_s=blue_duration, details=blue_details, round_num=round_num)
             combat_log.append(f"R{round_num} BLUE [{blue_type}] {blue_msg}")
             log_info("arena", f"Blue: [{blue_type}] {blue_msg} ({blue_duration:.1f}s)")
             _logj(log_path, {

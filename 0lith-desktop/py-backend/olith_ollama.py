@@ -96,7 +96,7 @@ def chat_with_ollama_stream(
 def chat_docker_pyrolith(
     model: str,
     messages: list[dict],
-    timeout: int = 300,
+    timeout: int = 360,
     num_ctx: int = 8192,
 ) -> str:
     """Appel a Pyrolith via Docker Ollama (port 11435)."""

@@ -189,7 +189,8 @@ OLLAMA_KV_CACHE_TYPE=q8_0      # Quantized KV cache
 - [x] Proactive background loop (olith_watcher.py, file watcher, suggestions panel)
 - [x] Sandboxed tools for agents (file read/search, system info)
 - [x] **Arena** — Pyrolith (Red) vs Cryolith (Blue) SQL Injection sparring: 5 live rounds, real-time streaming, score, post-match review
-- [x] Arena UX — stop button, tab lock, elapsed chrono, per-move LLM timer, expandable technical details, ARENA sidebar badge
+- [x] Arena UX — stop button, tab lock, elapsed chrono, per-move timer, expandable details, ARENA badge, scenario selector, round progress dots, Unicode move symbols, loading animation, winner badge, session export
+- [x] Arena robustness — adaptive timeouts per model, auto-fallback to qwen3:14b on short/failed responses, forced move sequences, 2-round context window, 30-min session budget
 - [x] Arena session logs (`~/.0lith/arena_logs/`) — per-session `.jsonl` with raw LLM responses for debugging
 
 ## Roadmap

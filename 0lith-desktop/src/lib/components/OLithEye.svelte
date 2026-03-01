@@ -262,6 +262,7 @@
     );
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <svg
     bind:this={svgEl}
     viewBox="0 0 80 100"
@@ -277,7 +278,7 @@
     }}
     role={clickable ? "button" : "img"}
     aria-label="0Lith Eye"
-    tabindex={clickable ? 0 : -1}
+    tabindex={clickable ? 0 : undefined}
     xmlns="http://www.w3.org/2000/svg"
 >
     <!-- Glow filter -->

@@ -187,6 +187,8 @@ export interface ArenaMove {
   badge_color: string;
   duration_s?: number; // LLM response time in seconds
   details?: string;    // technical payload / additional context
+  round?: number;      // 1-5
+  round_total?: number; // always 5
 }
 
 export interface ArenaScore {
