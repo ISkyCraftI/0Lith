@@ -20,8 +20,14 @@ The git root is `C:\Users\skycr\Perso\0Lith\`. The actual application lives in `
 All commands run from `0lith-desktop/` unless noted.
 
 ```bash
-# Full dev (Tauri + Vite + Python IPC)
+# Full dev — standard (no WDAC/HVCI restriction)
 npm run tauri dev
+
+# Full dev — WDAC/HVCI machine (Memory Integrity ON, signs binary after each Rust build)
+# Terminal 1:
+npm run dev                    # Vite HMR only
+# Terminal 2 (PowerShell, from 0lith-desktop/):
+.\scripts\dev-sign.ps1         # cargo build + sign + launch exe
 
 # Production build
 npm run tauri build
@@ -33,8 +39,8 @@ npm run check
 pip install -r py-backend/requirements.txt
 
 # External services (must be running before dev)
-docker start qdrant        # Qdrant vector DB on :6333
-docker start pyrolith      # Pyrolith LLM on :11435
+docker start qdrant        # Qdrant vector DB on :6333 — pending migration to embedded mode
+docker start pyrolith      # Pyrolith LLM on :11435 — pending Docker security hardening
 
 # Memory management
 python py-backend/olith_memory_init.py          # Init
@@ -54,7 +60,7 @@ Both communicate via **JSON line-delimited stdin/stdout** with UUID-correlated r
 
 **Agent routing**: Every user message hits `Hodolith` (qwen3:1.7b) first for classification, then routes to one of: Monolith (14b general), Aerolith (30b coder), Cryolith (8b blue team), Pyrolith (7b red team via Docker).
 
-**Memory**: Mem0 + Qdrant (vector) + optional Kuzu (graph). Embeddings: qwen3-embedding:0.6b (1024 dims, code-aware, #1 MTEB Multilingual). MemOS v2.0 flagged for Phase 2 evaluation (Tool Memory, KV-cache injection).
+**Memory**: Mem0 + Qdrant (currently Docker, pending migration to embedded `QdrantClient(path=...)`) + optional Kuzu (graph). Embeddings: qwen3-embedding:0.6b (1024 dims, code-aware, #1 MTEB Multilingual). MemOS v2.0 flagged for Phase 2 evaluation (Tool Memory, KV-cache injection).
 
 **Key rules** (from `0lith-desktop/CLAUDE.md`):
 - Python must be **3.12** (not 3.13+) — Kuzu requirement
@@ -62,6 +68,7 @@ Both communicate via **JSON line-delimited stdin/stdout** with UUID-correlated r
 - **Tauri 2** — shell permissions live in `src-tauri/capabilities/default.json`
 - qwen3 models emit `<think>...</think>` blocks — strip before parsing JSON routing responses
 - Gaming Mode unloads all models from VRAM; 0Lith must never monopolize the RTX 5070 Ti
+- `.claude/` and `__pycache__/` are in `.gitignore` ✓ — verified
 
 ## Immediate Sprint Priorities
 
@@ -71,7 +78,7 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 1. ~~**Repo cleanup**: fix `.gitignore` (remove `__pycache__`, `.obsidian` from tracking), clean cached files~~ **DONE** — gitignore enhanced, Reflexions/ staged, root CLAUDE.md committed
 2. ~~**English README**: pitch, demo GIF, hardware requirements, 5-step quickstart, roadmap~~ **DONE** — README.md rewritten in English, README.fr.md kept as French copy (with 🇫🇷/🇬🇧 links)
 3. ~~**AGPL-3.0 license**: add LICENSE file~~ **DONE** — LICENSE added at root
-4. **One working end-to-end demo**: red team OR blue team flow that can be shown
+4. ~~**One working end-to-end demo**: red team OR blue team flow~~ **DONE** — Arena: SQL Injection sparring (Pyrolith vs Cryolith, 5 rounds, live streaming, score + review) + UX polish: stop button, tab lock, per-move timer + expandable details, ARENA sidebar badge, session log files (`~/.0lith/arena_logs/`)
 
 ### Next 2-4 Weeks (Important)
 5. Demo video 2-3 min (key content for r/LocalLLaMA, HN)
@@ -79,13 +86,26 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 7. GitHub topics, issue templates, Sponsors activation
 8. r/LocalLLaMA launch post preparation
 
-### Feature Priorities (by impact)
-1. Shadow Thinking (proactive memory anticipation) — 2-3 days *(olith_watcher.py shadow loop exists; Mem0 pre-answer storage needs wiring to chat)*
-2. Conversation deletion + multi-select — 0.5 day
-3. Sidebar tabs (Agents / History) — 1 day
-4. OLithEye animated SVG — 1-2 days
-5. MCP Server for Zed.dev — 2-3 days
-6. Agents enfichables YAML (dock architecture) — 2-3 days
+### Critical — Infrastructure & Security
+1. **Qdrant embedded mode**: replace Docker with `QdrantClient(path="./qdrant_data")` in `olith_memory_init.py` — removes `docker start qdrant` requirement entirely
+2. **Pyrolith Docker hardening**: non-root user, `--cap-drop=ALL`, isolated bridge network, no outbound internet by default
+3. **Shadow Thinking** — 2-3 days *(olith_watcher.py shadow loop exists; Mem0 pre-answer storage needs wiring to chat)*
+
+### High — Next sprint
+4. **Agent output JSON schema**: standardize structured responses to prevent frontend parse bugs
+5. **Aerolith loading UI**: "Aerolith réfléchit… 3-5 min", progress bar, cancel — don't drop the 30B, make the wait dignified
+6. **Hodolith routing clarity**: Monolith *plans/reasons about* code, Aerolith *writes* code — update routing prompt
+7. Conversation deletion + multi-select — 0.5 day
+
+### Medium — Month 2-3
+8. Startup health checks (Ollama up? models pulled? Pyrolith container ready?)
+9. Memory token budget (≤ 512 tokens injected into small model contexts)
+10. Monthly memory pruning (Monolith reviews Mem0 entries > 30 days)
+11. Training Mode (Pyrolith vs Cryolith CVE sparring overnight + morning briefing)
+12. Sidebar tabs (Agents / History) — 1 day
+13. OLithEye animated SVG — 1-2 days
+14. MCP Server for Zed.dev — 2-3 days
+15. Agents enfichables YAML (dock architecture) — 2-3 days
 
 ## Business Context
 

@@ -8,7 +8,7 @@ import type {
   IPCRequest,
   IPCResponse,
   ChatResponse,
-} from "../types/ipc";
+} from "../../types/ipc";
 
 const MAX_MESSAGE_LENGTH = 10000;
 const MAX_HISTORY = 500;

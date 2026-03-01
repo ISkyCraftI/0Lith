@@ -1,5 +1,5 @@
 import { Command } from "@tauri-apps/plugin-shell";
-import type { IPCRequest, IPCResponse } from "../types/ipc";
+import type { IPCRequest, IPCResponse } from "../../types/ipc";
 
 export type StreamCallback = (data: IPCResponse) => void;
 
@@ -37,7 +37,7 @@ function handleStdout(data: string) {
       const response: IPCResponse = JSON.parse(trimmed);
       const req = pending.get(response.id);
       if (req) {
-        if (response.status === "streaming" || response.status === "routing") {
+        if (response.status === "streaming" || response.status === "routing" || response.status === "arena") {
           // Intermediate message — call stream callback, don't resolve
           req.onStream?.(response);
         } else {

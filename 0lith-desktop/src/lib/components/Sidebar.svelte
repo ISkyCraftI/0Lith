@@ -1,10 +1,11 @@
 <script lang="ts">
     import OLithEye from "./OLithEye.svelte";
-    import * as agentsStore from "../stores/agents.svelte";
-    import * as chat from "../stores/chat.svelte";
-    import * as gaming from "../stores/gaming.svelte";
-    import * as sessionsStore from "../stores/sessions.svelte";
-    import * as backend from "../stores/pythonBackend.svelte";
+    import * as agentsStore from "./stores/agents.svelte";
+    import * as chat from "./stores/chat.svelte";
+    import * as gaming from "./stores/gaming.svelte";
+    import * as sessionsStore from "./stores/sessions.svelte";
+    import * as backend from "./stores/pythonBackend.svelte";
+    import * as arenaStore from "./stores/arena.svelte";
     import type { Agent, AgentId, AgentStatus, IPCRequest, ChatMessage } from "../types/ipc";
 
     interface Props {
@@ -92,6 +93,8 @@
     let displayAgents = $derived(agents.length > 0 ? agents : defaultAgents);
 
     let gamingMode = $derived(gaming.isGaming());
+    let arenaPhase = $derived(arenaStore.getPhase());
+    let arenaActive = $derived(arenaPhase === "running" || arenaPhase === "review");
 
     // Eye state mapping from active agent status
     let sidebarEyeState = $derived.by(() => {
@@ -231,13 +234,16 @@
             {@const status = statuses[agent.id] ?? "idle"}
             {@const isActive = activeAgent === agent.id}
             {@const loaded = isModelLoaded(agent)}
+            {@const isArenaFighter = arenaActive && (agent.id === "pyrolith" || agent.id === "cryolith")}
             <div class="agent-item" class:active={isActive}>
                 <OLithEye size={28} agentColor={agent.color} animated={false} />
                 <div class="agent-info">
                     <div class="agent-name">{agent.name}</div>
                     <div class="agent-meta">
                         <span class="agent-role">{agent.role}</span>
-                        {#if loaded}
+                        {#if isArenaFighter}
+                            <span class="arena-badge" title="Actif dans l'Arena">ARENA</span>
+                        {:else if loaded}
                             <span
                                 class="vram-badge"
                                 title="{getModelVram(agent)} GB VRAM">GPU</span
@@ -310,6 +316,22 @@
                 ></div>
             </div>
             <div class="vram-text">{vramUsedGb} / 16 GB</div>
+        {/if}
+
+        {#if arenaActive}
+            <div class="arena-vram-section">
+                <div class="arena-vram-label">Arena en cours</div>
+                <div class="arena-vram-row">
+                    <span class="arena-dot arena-dot-red"></span>
+                    <span class="arena-vram-name">Pyrolith</span>
+                    <span class="arena-vram-info">Docker :11435 · ~5 GB</span>
+                </div>
+                <div class="arena-vram-row">
+                    <span class="arena-dot arena-dot-blue"></span>
+                    <span class="arena-vram-name">Cryolith</span>
+                    <span class="arena-vram-info">Foundation-Sec · ~5 GB</span>
+                </div>
+            </div>
         {/if}
     </div>
 
@@ -498,6 +520,15 @@
         font-weight: 600;
         letter-spacing: 0.03em;
     }
+    .arena-badge {
+        font-size: 0.55rem;
+        padding: 0px 4px;
+        border-radius: 3px;
+        background: rgba(234, 88, 12, 0.2);
+        color: #ea580c;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+    }
     .status-dot {
         width: 8px;
         height: 8px;
@@ -614,6 +645,44 @@
     }
     .gaming-label {
         color: #6b7280;
+    }
+    .arena-vram-section {
+        margin-top: 0.5rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border);
+    }
+    .arena-vram-label {
+        font-size: 0.6rem;
+        color: #ea580c;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.3rem;
+        font-weight: 600;
+    }
+    .arena-vram-row {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 1px 0;
+    }
+    .arena-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .arena-dot-red  { background: #ef4444; }
+    .arena-dot-blue { background: #0ea5e9; }
+    .arena-vram-name {
+        font-size: 0.65rem;
+        color: var(--text-secondary);
+        font-weight: 600;
+        min-width: 55px;
+    }
+    .arena-vram-info {
+        font-size: 0.55rem;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
     }
     .gaming-bar {
         background: #6b7280 !important;

@@ -1,18 +1,22 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from "svelte";
     import { listen } from "@tauri-apps/api/event";
     import { invoke } from "@tauri-apps/api/core";
     import { resolveResource } from "@tauri-apps/api/path";
+    import TitleBar from "./lib/components/TitleBar.svelte";
+    import ResizeHandles from "./lib/components/ResizeHandles.svelte";
+    import ArenaView from "./lib/components/ArenaView.svelte";
     import Sidebar from "./lib/components/Sidebar.svelte";
     import ChatArea from "./lib/components/ChatArea.svelte";
     import InputBar from "./lib/components/InputBar.svelte";
     import StatusBar from "./lib/components/StatusBar.svelte";
     import SuggestionsBar from "./lib/components/SuggestionsBar.svelte";
-    import * as backend from "./lib/stores/pythonBackend.svelte";
-    import * as agentsStore from "./lib/stores/agents.svelte";
-    import * as chat from "./lib/stores/chat.svelte";
-    import * as gaming from "./lib/stores/gaming.svelte";
-    import * as watcher from "./lib/stores/watcher.svelte";
+    import * as backend from "./lib/components/stores/pythonBackend.svelte";
+    import * as agentsStore from "./lib/components/stores/agents.svelte";
+    import * as chat from "./lib/components/stores/chat.svelte";
+    import * as gaming from "./lib/components/stores/gaming.svelte";
+    import * as watcher from "./lib/components/stores/watcher.svelte";
+    import * as arenaStore from "./lib/components/stores/arena.svelte";
     import type {
         IPCRequest,
         AgentsListResponse,
@@ -22,11 +26,16 @@
         LoadedModel,
     } from "./lib/types/ipc";
 
+    let activeTab = $state<"chat" | "arena">("chat");
+    let statusInterval: ReturnType<typeof setInterval> | undefined;
     let ollamaOk = $state(false);
     let qdrantOk = $state(false);
     let loadedModels = $state<LoadedModel[]>([]);
     let vramUsedGb = $state(0);
     let watcherSuggestions = $derived(watcher.getSuggestions());
+    let arenaLocked = $derived(
+        arenaStore.getPhase() === "running" || arenaStore.getPhase() === "review"
+    );
 
     async function fetchStatus() {
         try {
@@ -171,8 +180,12 @@
                 agentsStore.setAgents(agentsRes.agents);
             }
 
-            // Fetch status (includes VRAM info)
+            // Initial status fetch — slight delay to let Ollama/Qdrant respond
+            await new Promise((r) => setTimeout(r, 1500));
             await fetchStatus();
+
+            // Auto-refresh status every 30s
+            statusInterval = setInterval(fetchStatus, 30_000);
 
             // Start background watcher (optional — does not block app)
             try {
@@ -180,12 +193,19 @@
             } catch {
                 console.warn("Watcher start failed — suggestions disabled");
             }
+
         } catch (e: any) {
             chat.addSystemMessage(`Connection failed: ${e?.message || e}`);
         }
     });
+
+    onDestroy(() => {
+        if (statusInterval !== undefined) clearInterval(statusInterval);
+    });
 </script>
 
+<ResizeHandles />
+<TitleBar {activeTab} {arenaLocked} onTabChange={(t) => (activeTab = t)} />
 <div class="app-layout">
     <Sidebar
         {loadedModels}
@@ -195,13 +215,17 @@
         onToggleGaming={handleToggleGaming}
     />
     <div class="main-area">
-        <ChatArea />
-        <SuggestionsBar
-            suggestions={watcherSuggestions}
-            onAccept={handleAcceptSuggestion}
-            onDismiss={handleDismissSuggestion}
-        />
-        <InputBar />
+        {#if activeTab === "chat"}
+            <ChatArea />
+            <SuggestionsBar
+                suggestions={watcherSuggestions}
+                onAccept={handleAcceptSuggestion}
+                onDismiss={handleDismissSuggestion}
+            />
+            <InputBar />
+        {:else}
+            <ArenaView />
+        {/if}
     </div>
 </div>
 <StatusBar ollama={ollamaOk} qdrant={qdrantOk} />
@@ -209,7 +233,7 @@
 <style>
     .app-layout {
         display: flex;
-        height: calc(100vh - 24px); /* minus status bar */
+        height: calc(100vh - 72px); /* minus titlebar (48px) + status bar (24px) */
         overflow: hidden;
     }
     .main-area {

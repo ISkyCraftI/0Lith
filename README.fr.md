@@ -61,6 +61,7 @@ Les noms suivent une convention grecque : *Hodo-* (chemin), *Mono-* (unique), *A
 │  Python Backend                               │
 │  ├─ olith_core.py      Chat réactif (IPC)    │
 │  ├─ olith_agents.py    Routage + exécution   │
+│  ├─ olith_arena.py     Sparring Red vs Blue  │
 │  ├─ olith_watcher.py   Background proactif   │
 │  ├─ olith_history.py   Persistance sessions  │
 │  ├─ olith_tools.py     Outils sandboxés      │
@@ -121,7 +122,7 @@ ollama pull hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF  # Cryolith
 
 ```bash
 # 3. Lancer les services Docker
-# Base vectorielle Qdrant
+# Base vectorielle Qdrant (migration prévue vers le mode embarqué — Docker ne sera plus requis)
 docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
   -v ~/.qdrant/storage:/qdrant/storage qdrant/qdrant
 
@@ -187,6 +188,9 @@ OLLAMA_KV_CACHE_TYPE=q8_0      # Cache KV quantifié
 - [x] System Tray (background, notifications, menu Gaming Mode)
 - [x] Background loop proactif (olith_watcher.py, file watcher, panel suggestions)
 - [x] Outils sandboxés pour agents (lecture/recherche de fichiers, system info)
+- [x] **Arena** — Sparring SQLi Pyrolith (Red) vs Cryolith (Blue) : 5 rounds en direct, streaming temps réel, score, analyse post-combat
+- [x] UX Arena — bouton stop, verrouillage onglet, chrono, timer LLM par mouvement, détails techniques dépliables, badge ARENA dans la sidebar
+- [x] Logs de session Arena (`~/.0lith/arena_logs/`) — fichier `.jsonl` par session avec les réponses LLM brutes
 
 ## Roadmap
 
@@ -200,6 +204,7 @@ FAIT ─────────────────────────
 ✅ Phase 3 : Background loop (file watcher, suggestions proactives)
 ✅ Sécurité : sandbox filesystem, lane queue, cancel IPC, retry + backoff
 ✅ Persistance : sessions JSON, historique sidebar
+✅ Arena : sparring SQLi Pyrolith vs Cryolith (5 rounds, direct, score + analyse)
 
 COURT TERME ─────────────────────────────────
 ⬜ Shadow Thinking (anticipation proactive via Mem0)
@@ -208,10 +213,10 @@ COURT TERME ──────────────────────�
 ⬜ MCP Server pour Zed.dev
 
 MOYEN TERME ─────────────────────────────────
+⬜ Training Mode (sparring nocturne Pyrolith vs Cryolith sur des CVE + briefing matin)
 ⬜ Agents enfichables via YAML (dock architecture)
 ⬜ Dock Game Dev (Storylith, Artlith, Gamelith)
 ⬜ Dock Personnel (Schedulith, Econolith)
-⬜ Sparring nocturne Pyrolith vs Cryolith sur des CVE
 
 LONG TERME ──────────────────────────────────
 ⬜ Pipeline d'ingestion Google Takeout

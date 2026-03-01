@@ -31,7 +31,7 @@
 - Shell permissions in `src-tauri/capabilities/default.json` (NOT tauri.conf.json)
 - Python backend: `py-backend/olith_core.py` — persistent process, not spawn-per-request
 - Background loop: `py-backend/olith_watcher.py` — separate process for proactive features (Phase 3)
-- Memory: Mem0 + Qdrant (Docker) + optional Kuzu graph
+- Memory: Mem0 + Qdrant (Docker, planned migration to embedded `QdrantClient(path="./qdrant_data")`) + optional Kuzu graph
 - Embeddings: qwen3-embedding:0.6b (1024 dimensions) via Ollama
 
 ## The 5 Agents (Cybersecurity Dock V1)
@@ -115,10 +115,15 @@ Separate Python process from olith_core.py. Launched in parallel by Tauri.
 - **qwen3 /no_think**: qwen3 models use `<think>...</think>` by default. Mem0 fact extraction breaks without `/no_think`. Class-level monkey patch on `OllamaLLM.generate_response` is applied at module top of olith_core.py.
 - **Windows cp1252**: stdout must be forced to UTF-8 (`io.TextIOWrapper`) for emoji support.
 - **Hodolith routing**: Must strip `<think>` tags from qwen3 output before JSON parsing. Falls back to text matching if JSON parse fails.
-- **Pyrolith Docker**: Uses Ollama API (`/api/chat`, `/api/tags`), NOT OpenAI-compatible endpoints.
-- **Aerolith 30B**: Exceeds 16 GB VRAM, Ollama does CPU offload. Expect 3-5 min responses. Timeout set to 600s. Frontend MUST handle slow responses gracefully (progress indicator, no freeze).
-- **Mem0 + Qdrant**: Qdrant must be running before olith_core.py starts. `docker start qdrant`.
+- **Pyrolith Docker**: Uses Ollama API (`/api/chat`, `/api/tags`), NOT OpenAI-compatible endpoints. Current setup is **not hardened** — pending: run as non-root, `--cap-drop=ALL`, isolated bridge network with no outbound internet.
+- **Aerolith 30B**: Exceeds 16 GB VRAM, Ollama does CPU offload. Expect 3-5 min responses. Timeout set to 600s. Frontend MUST handle slow responses gracefully (progress indicator, no freeze). Don't remove the 30B — make the wait dignified.
+- **Mem0 + Qdrant**: Qdrant must be running before olith_core.py starts. `docker start qdrant`. Planned migration to embedded mode (`QdrantClient(path="./qdrant_data")`) to eliminate Docker dependency for Qdrant — recollection dimensions (1024) unchanged.
 - **Kuzu**: Optional. Only works with Python 3.12. System works fine without it (vector-only mode).
+- **Memory token overflow**: Mem0 can inject too many retrieved memories into small model contexts (Hodolith 1.7B, Cryolith 8B). Implement a hard token budget (≤ 512 tokens for memory context) to prevent attention saturation.
+- **Monolith/Aerolith boundary**: Monolith *reasons and plans about* code; Aerolith *writes* code. Hodolith routing prompt currently captures this but the distinction should be explicit: never route "how to approach this algorithm" to Aerolith, never route "write this function" to Monolith.
+- **Agent output schema**: Agents return free-form text; the frontend parses it with regex/heuristics. A strict JSON schema for structured responses (especially tool calls and routing) would eliminate a class of UI parse bugs.
+- **WDAC/HVCI (dev machine)**: HVCI (Memory Integrity ON) + Smart App Control blocks unsigned Rust binaries. Fix: self-signed cert `CN=0Lith Dev` (thumbprint `DACA80CF...`) trusted in `LocalMachine\Root` + `TrustedPublisher`. Binary must be signed after each `cargo build` via `scripts/dev-sign.ps1`. Cargo target redirected to `AppData\Local\olith-build` (see `.cargo/config.toml`, gitignored). See top of `dev-sign.ps1` for one-time setup.
+- **Store import paths**: Stores live in `src/lib/components/stores/`. They must import types via `../../types/ipc` (NOT `../types/ipc`). Components import stores via `./stores/...` (relative to `lib/components/`).
 
 ## Color Scheme
 - Background primary: `#282C33`
@@ -148,6 +153,8 @@ Separate Python process from olith_core.py. Launched in parallel by Tauri.
 Full research: `Reflexions/0Lith_Memory_Architecture.md` and `Reflexions/0Lith_Embeddings_Memory_Research.md`.
 
 ## Project Status
+
+### Completed
 - [x] Phase 0: Ping-pong IPC prototype
 - [x] Phase 1: Backend Python (olith_core.py, Hodolith routing, Mem0/Qdrant)
 - [x] Phase 2: Frontend chat interface (sidebar, markdown, VRAM indicators, streaming)
@@ -155,20 +162,40 @@ Full research: `Reflexions/0Lith_Memory_Architecture.md` and `Reflexions/0Lith_E
 - [x] Phase 3: System tray (background persistence, notifications)
 - [x] Phase 3: Background loop (olith_watcher.py, file watcher, suggestions panel)
 - [x] Phase 3: Chat persistence (JSON history, `~/.0lith/chats/`, session sidebar)
-- [ ] Phase 3: Shadow Thinking (proactive memory preparation) — **HIGH PRIORITY**
+- [x] Infra: `.claude/` and `__pycache__/` correctly excluded from git (`.gitignore` verified ✓)
 - [x] Launch: Repo cleanup — gitignore enhanced, Reflexions/ staged, root CLAUDE.md added
 - [x] Launch: AGPL-3.0 license added (LICENSE at root), English README (README.md), French copy kept as README.fr.md
-- [ ] Launch: demo video
-- [ ] Launch: One working red/blue team end-to-end demo flow
+
+### 🔴 Critical — Do now
+- [ ] Phase 3: Shadow Thinking (proactive memory preparation) — watcher shadow loop exists, needs Mem0 wiring
+- [ ] Infra: Switch Qdrant to embedded mode (`QdrantClient(path="./qdrant_data")`) — eliminates Docker dependency for Qdrant entirely
+- [ ] Security: Harden Pyrolith Docker — non-root user, `--cap-drop=ALL`, isolated bridge network, no outbound internet
+
+### 🟠 High — Next sprint
+- [x] Frontend: Custom TitleBar — decorations: false, Chat/Arena tab navigation, window controls (─ □ ✕)
+- [x] Launch: Arena — SQL Injection sparring demo (Pyrolith vs Cryolith, 5 rounds + review, live streaming)
+- [x] Arena UX polish — stop button, tab lock (flash red), elapsed chrono, per-move timer + expandable details, ARENA sidebar badge, InputBar lock, collapsible log strip, per-session `.jsonl` file log in `~/.0lith/arena_logs/`
+- [ ] Backend: Standardize agent outputs to strict JSON schema (eliminates frontend parse bugs)
+- [ ] Frontend: Aerolith loading state UI ("Aerolith réfléchit… 3-5 min", progress bar, cancel)
+- [ ] Backend: Clarify Monolith/Aerolith boundary in Hodolith routing prompt (Monolith plans/reasons, Aerolith writes)
 - [ ] Feature: Conversation deletion + multi-select
+
+### 🟡 Medium — Month 2-3
+- [ ] Launch: Demo video 2-3 min (r/LocalLLaMA, Hacker News)
+- [ ] Infra: Startup health checks (Ollama up? models pulled? Pyrolith container ready?) before launching Tauri
+- [ ] Memory: Strict token budget for memory injection (≤ 512 tokens, prevents small model overflow)
+- [ ] Memory: Monthly pruning — Monolith reviews Mem0 entries > 30 days, deletes outdated/contradicted facts
 - [ ] Feature: Sidebar tabs (Agents / History separated)
 - [ ] Feature: OLithEye animated SVG (5 states: idle, thinking, responding, sleeping, gaming)
 - [ ] Feature: MCP Server for Zed.dev
 - [ ] Feature: Agent dock YAML configs
-- [ ] Future: Game dev dock (Storylith, Artlith, Gamelith)
-- [ ] Future: Personal dock (Schedulith, Econolith)
-- [ ] Future: Sparring nocturne (Pyrolith vs Cryolith overnight on CVEs)
-- [ ] Future: Google Takeout ingestion pipeline
+- [ ] Training Mode: Pyrolith vs Cryolith CVE sparring overnight + morning briefing
+
+### Future
+- [ ] Game dev dock (Storylith, Artlith, Gamelith)
+- [ ] Personal dock (Schedulith, Econolith)
+- [ ] Google Takeout ingestion pipeline
+- [ ] Per-agent LoRA fine-tuning (QLoRA via Unsloth)
 
 ## Launch Preparation
 
@@ -201,26 +228,90 @@ Immediate non-code priorities (from `Reflexions/Matrice Einsenhower.md`):
 Full analysis: `Reflexions/Etude de Marché.md`.
 
 ## Commands
-- Dev: `cd C:\Users\skycr\Perso\0Lith\0lith-desktop && npm run tauri dev`
+- Dev (standard): `cd C:\Users\skycr\Perso\0Lith\0lith-desktop && npm run tauri dev`
+- Dev (WDAC machine — 2 terminals required):
+  - Terminal 1: `npm run dev` (Vite HMR on :5173 — must be running first)
+  - Terminal 2: `.\scripts\dev-sign.ps1` (cargo build + Authenticode sign + launch)
 - Build: `npm run tauri build`
 - Type check: `npm run check`
 - Python backend deps: `cd py-backend && pip install -r requirements.txt`
-- Qdrant Docker: `docker start qdrant` (port 6333)
-- Pyrolith Docker: `docker start pyrolith` (port 11435, needs `--gpus all`)
+- Qdrant Docker: `docker start qdrant` (port 6333) — *pending migration to embedded mode*
+- Pyrolith Docker: `docker start pyrolith` (port 11435, needs `--gpus all`) — *pending security hardening*
 - Memory init: `cd py-backend && python olith_memory_init.py`
 - Memory test: `cd py-backend && python olith_memory_init.py --test`
 - Memory reset: `cd py-backend && python olith_memory_init.py --reset`
+
+## TitleBar & Navigation
+
+Custom title bar replacing native OS decorations (`"decorations": false` in `tauri.conf.json`).
+
+**Component**: `src/lib/components/TitleBar.svelte`
+- `data-tauri-drag-region` on the root div — entire bar is draggable, buttons excluded
+- Window API: `getCurrentWindow()` from `@tauri-apps/api/window` — minimize / toggleMaximize / close
+- Permissions in `capabilities/default.json`: `core:window:allow-minimize`, `core:window:allow-toggle-maximize`, `core:window:allow-close`
+- Height: 48px — layout height adjusted to `calc(100vh - 72px)` (titlebar 48 + statusbar 24)
+
+**Tabs**:
+- `Chat` — main chat interface (default)
+- `Arena` — Pyrolith vs Cryolith SQL Injection sparring (live, streaming)
+
+**Tab state**: `$state<'chat' | 'arena'>` in `App.svelte`, passed down as props.
+
+**ArenaView**: `src/lib/components/ArenaView.svelte` — two-panel sparring UI (see Arena section below).
+
+## Arena — SQL Injection Sparring
+
+Live red-vs-blue IPC sparring demo: Pyrolith (Red) attacks, Cryolith (Blue) defends, 5 rounds + weakness review.
+
+**IPC flow**: `frontend.send({command:"arena"}, 600_000, onStream)` — same streaming pattern as chat.
+- Per-move events: `{"id":"…", "status":"arena", "move":{...}, "score":{...}}` — non-resolving (calls `onStream`)
+- Final: `{"id":"…", "status":"ok", "score_red":N, "score_blue":N, "review":{...}}` — resolves promise
+
+**Arena files**:
+| File | Role |
+|------|------|
+| `py-backend/olith_arena.py` | Core logic: 5-round loop, LLM calls, JSON parsing, emit helpers |
+| `py-backend/olith_core.py` | `cmd_arena()` handler — uses `_chat_lock` to serialize with chat |
+| `src/lib/types/ipc.ts` | `ArenaMove`, `ArenaEvent`, `ArenaResponse` types |
+| `src/lib/components/stores/arena.svelte.ts` | Svelte 5 runes store: moves, score, phase, review, error |
+| `src/lib/components/ArenaView.svelte` | Two-panel UI: Red (left) / VS / Blue (right), score bar, review |
+
+**Models**:
+- Pyrolith: `deephat/DeepHat-V1-7B:latest` on Docker port 11435 → fallback `qwen3:14b`
+- Cryolith: `hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF:latest` → fallback `qwen3:14b`
+
+**Score table** (per move type):
+```
+Red:  RECON=3, EXPLOIT=10, SUCCESS=15, PIVOT=12, DATA=20
+Blue: MONITOR=3, ALERT=5,  BLOCK=15,  PATCH=10,  ISOLATE=20
+```
+
+**Phases**: `idle → running → review → done`
+
+**Key gotchas**:
+- `status:"arena"` added to non-resolving list in `pythonBackend.svelte.ts` (alongside `"streaming"`, `"routing"`)
+- Arena uses `_chat_lock` — chat is blocked while arena runs (expected; ~2-5 min session)
+- `_parse_move()` uses regex + keyword scan + fallback — LLM JSON failures never crash the UI
+- **Svelte 5 snippets** must use `{@render MoveRow({ move })}` — NOT `<MoveRow {move} />` (component syntax) — silent render failure otherwise
+- **Stop button** sends `{command:"cancel"}` → `cmd_cancel()` sets `_cancel_event` → arena loop breaks between rounds
+- **Tab lock**: `App.svelte` derives `arenaLocked` from arena phase; passed to `TitleBar` which flashes "Chat" tab red and blocks navigation while arena is `running|review`
+- **InputBar lock**: orange notice banner + disabled textarea/button while arena is active; uses same `arenaStore.getPhase()` derivation
+- **ARENA badge**: sidebar shows orange `ARENA` badge (instead of DISK/GPU) for Pyrolith + Cryolith while `arenaActive`; CSS `.arena-badge` in Sidebar.svelte
+- **Per-move timing**: `duration_s` (float, seconds from `time.time()`) + `details` (payload/technical text) included in each move event; frontend shows `Xs` timer badge and `›` expand chevron button; click expands a monospace details panel
+- **Error resilience**: each LLM call wrapped in `try/except`; red team failure breaks the round + logs to file; blue team failure is non-fatal (continues to next round); review call failures fall back to `"Analyse indisponible."`
+- **File log**: each arena session writes `~/.0lith/arena_logs/arena_YYYYMMDD_HHMMSS_sql_injection.jsonl` — one JSON line per event (start / move / review / error / complete); includes `raw` LLM response (truncated to 3000 chars) for post-mortem debugging
+- **Collapsible log strip**: `ArenaView.svelte` has a `"Log de combat"` toggle bar between panels and review section; shows all moves as `HH:MM:SS  RED   [TYPE   ]  message [Xs]` in a scrollable monospace `<pre>`; built from `arena.getCombatLog()` in the store
 
 ## File Structure
 ```
 0lith-desktop/
 ├── src-tauri/              # Rust/Tauri 2 backend
 │   ├── src/lib.rs          # System tray, gaming mode sync, window management
-│   ├── capabilities/default.json
-│   └── tauri.conf.json
+│   ├── capabilities/default.json  # Window + shell permissions
+│   └── tauri.conf.json     # decorations: false (custom titlebar)
 ├── src/                    # Svelte 5 frontend
-│   ├── lib/components/     # Sidebar, ChatArea, ChatMessage, InputBar, StatusBar, etc.
-│   ├── lib/stores/         # pythonBackend, chat, agents, sessions, gaming, watcher
+│   ├── lib/components/     # TitleBar, Sidebar, ChatArea, ChatMessage, InputBar, StatusBar, ArenaView, ResizeHandles, OLithEye
+│   │   └── stores/         # pythonBackend, chat, agents, sessions, gaming, watcher, arena (.svelte.ts)
 │   ├── lib/types/ipc.ts    # Full IPC protocol types
 │   └── App.svelte
 ├── py-backend/             # Python backend
@@ -230,6 +321,7 @@ Full analysis: `Reflexions/Etude de Marché.md`.
 │   ├── olith_tools.py      # Sandboxed filesystem tools + system info
 │   ├── olith_history.py    # JSON session persistence (~/.0lith/chats/)
 │   ├── olith_shared.py     # Mem0 monkey-patch, think-block stripping, logging
+│   ├── olith_arena.py      # Arena sparring logic (5 rounds, scoring, review, emit helpers)
 │   ├── olith_watcher.py    # Background loop (proactive, file watcher, suggestions)
 │   ├── olith_memory_init.py # Agent identities + Mem0/Qdrant/Kuzu setup
 │   └── requirements.txt

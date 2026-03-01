@@ -52,13 +52,15 @@ export interface IPCRequest {
     | "clear_memories"
     | "list_sessions"
     | "load_session"
-    | "new_session";
+    | "new_session"
+    | "cancel"
+    | "arena";
   [key: string]: unknown;
 }
 
 export interface IPCResponse {
   id: string;
-  status: "ok" | "error" | "streaming" | "routing";
+  status: "ok" | "error" | "streaming" | "routing" | "arena";
   message?: string;
   chunk?: string;
   [key: string]: unknown;
@@ -173,4 +175,37 @@ export interface WatcherStatusEvent {
   watch_dir: string;
   paused: boolean;
   ollama_available: boolean;
+}
+
+// ── Arena ──
+
+export interface ArenaMove {
+  team: "red" | "blue";
+  type: string; // RECON | EXPLOIT | SUCCESS | PIVOT | DATA | MONITOR | ALERT | BLOCK | PATCH | ISOLATE
+  message: string;
+  timestamp: string; // "HH:MM:SS"
+  badge_color: string;
+  duration_s?: number; // LLM response time in seconds
+  details?: string;    // technical payload / additional context
+}
+
+export interface ArenaScore {
+  red: number;
+  blue: number;
+}
+
+export interface ArenaEvent extends IPCResponse {
+  // status: "arena"
+  phase?: "start" | "review_start" | "complete";
+  move?: ArenaMove;
+  score?: ArenaScore;
+  scenario?: string;
+  review?: { red: string; blue: string };
+}
+
+export interface ArenaResponse extends IPCResponse {
+  // status: "ok" — final response after all rounds
+  score_red: number;
+  score_blue: number;
+  review: { red: string; blue: string };
 }

@@ -61,6 +61,7 @@ Agent names follow a Greek convention: *Hodo-* (path), *Mono-* (single), *Aero-*
 │  Python Backend                               │
 │  ├─ olith_core.py      Reactive chat (IPC)   │
 │  ├─ olith_agents.py    Routing + execution   │
+│  ├─ olith_arena.py     Red vs Blue sparring  │
 │  ├─ olith_watcher.py   Proactive background  │
 │  ├─ olith_history.py   Session persistence   │
 │  ├─ olith_tools.py     Sandboxed tools       │
@@ -121,7 +122,7 @@ ollama pull hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF  # Cryolith
 
 ```bash
 # 3. Start Docker services
-# Qdrant vector database
+# Qdrant vector database (planned migration to embedded mode — Docker will no longer be required)
 docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
   -v ~/.qdrant/storage:/qdrant/storage qdrant/qdrant
 
@@ -187,6 +188,9 @@ OLLAMA_KV_CACHE_TYPE=q8_0      # Quantized KV cache
 - [x] System Tray (background persistence, notifications, Gaming Mode menu)
 - [x] Proactive background loop (olith_watcher.py, file watcher, suggestions panel)
 - [x] Sandboxed tools for agents (file read/search, system info)
+- [x] **Arena** — Pyrolith (Red) vs Cryolith (Blue) SQL Injection sparring: 5 live rounds, real-time streaming, score, post-match review
+- [x] Arena UX — stop button, tab lock, elapsed chrono, per-move LLM timer, expandable technical details, ARENA sidebar badge
+- [x] Arena session logs (`~/.0lith/arena_logs/`) — per-session `.jsonl` with raw LLM responses for debugging
 
 ## Roadmap
 
@@ -200,6 +204,7 @@ DONE ─────────────────────────
 ✅ Phase 3 : Background loop (file watcher, proactive suggestions)
 ✅ Security : filesystem sandbox, lane queue, IPC cancel, retry + backoff
 ✅ Persistence : JSON sessions, history sidebar
+✅ Arena : Pyrolith vs Cryolith SQL Injection sparring (5 rounds, live, score + review)
 
 SHORT TERM ──────────────────────────────────
 ⬜ Shadow Thinking (proactive memory anticipation via Mem0)
@@ -208,10 +213,10 @@ SHORT TERM ───────────────────────
 ⬜ MCP Server for Zed.dev
 
 MEDIUM TERM ─────────────────────────────────
+⬜ Training Mode (overnight Pyrolith vs Cryolith CVE sparring + morning briefing)
 ⬜ Pluggable agents via YAML (dock architecture)
 ⬜ Game Dev dock (Storylith, Artlith, Gamelith)
 ⬜ Personal dock (Schedulith, Econolith)
-⬜ Overnight sparring: Pyrolith vs Cryolith on CVEs
 
 LONG TERM ───────────────────────────────────
 ⬜ Google Takeout ingestion pipeline

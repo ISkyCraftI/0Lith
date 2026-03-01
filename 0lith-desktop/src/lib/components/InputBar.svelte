@@ -1,10 +1,14 @@
 <script lang="ts">
-    import * as chat from "../stores/chat.svelte";
-    import * as backend from "../stores/pythonBackend.svelte";
+    import * as chat from "./stores/chat.svelte";
+    import * as backend from "./stores/pythonBackend.svelte";
+    import * as arenaStore from "./stores/arena.svelte";
 
     let inputText = $state("");
     let textarea: HTMLTextAreaElement;
-    let disabled = $derived(chat.isLoading() || !backend.isConnected());
+    let arenaLocked = $derived(
+        arenaStore.getPhase() === "running" || arenaStore.getPhase() === "review"
+    );
+    let disabled = $derived(chat.isLoading() || !backend.isConnected() || arenaLocked);
 
     function handleKeydown(e: KeyboardEvent) {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -31,15 +35,23 @@
 </script>
 
 <div class="input-bar-wrapper">
+    {#if arenaLocked}
+        <div class="arena-notice">
+            <span class="arena-notice-dot"></span>
+            Arena en cours — envoi désactivé pendant le combat
+        </div>
+    {/if}
     <div class="input-bar">
         <textarea
             bind:this={textarea}
             bind:value={inputText}
             oninput={handleInput}
             onkeydown={handleKeydown}
-            placeholder={backend.isConnected()
-                ? "Ecris un message... (Shift+Enter pour nouvelle ligne)"
-                : "Backend disconnected..."}
+            placeholder={arenaLocked
+                ? "Arena en cours — passe sur l'onglet Arena pour suivre le combat"
+                : backend.isConnected()
+                  ? "Ecris un message... (Shift+Enter pour nouvelle ligne)"
+                  : "Backend disconnected..."}
             {disabled}
             rows="1"
         ></textarea>
@@ -80,6 +92,28 @@
     .input-bar-wrapper {
         border-top: 1px solid var(--border);
         background: var(--bg-primary);
+    }
+    .arena-notice {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 1rem;
+        font-size: 11px;
+        color: #ea580c;
+        background: rgba(234,88,12,0.06);
+        border-bottom: 1px solid rgba(234,88,12,0.15);
+    }
+    .arena-notice-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #ea580c;
+        flex-shrink: 0;
+        animation: pulse-dot 1.5s infinite;
+    }
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.3; }
     }
     .input-bar {
         display: flex;

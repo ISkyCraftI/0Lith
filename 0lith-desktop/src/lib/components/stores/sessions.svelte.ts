@@ -6,7 +6,7 @@ import type {
   LoadSessionResponse,
   NewSessionResponse,
   ChatMessage,
-} from "../types/ipc";
+} from "../../types/ipc";
 
 let sessions = $state<SessionInfo[]>([]);
 let currentSessionId = $state<string | null>(null);

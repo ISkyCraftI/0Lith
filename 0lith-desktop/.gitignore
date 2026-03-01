@@ -14,6 +14,7 @@ dist-ssr
 
 # Rust / Tauri
 src-tauri/target/
+src-tauri/.cargo/config.toml
 
 # Editor directories and files
 .vscode/*

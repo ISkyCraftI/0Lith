@@ -1,6 +1,6 @@
 <script lang="ts">
-    import * as backend from "../stores/pythonBackend.svelte";
-    import * as chat from "../stores/chat.svelte";
+    import * as backend from "./stores/pythonBackend.svelte";
+    import * as chat from "./stores/chat.svelte";
 
     interface Props {
         ollama?: boolean;

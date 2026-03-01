@@ -3,7 +3,7 @@ import type {
   WatcherEvent,
   WatcherCommand,
   WatcherStatusEvent,
-} from "../types/ipc";
+} from "../../types/ipc";
 
 // ── State ──
 

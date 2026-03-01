@@ -125,8 +125,8 @@ class OlithBackend:
             if not handler:
                 return {"id": req_id, "status": "error", "message": f"Unknown command: {command}"}
 
-            # Commands that need emit
-            if command == "chat":
+            # Commands that need emit (streaming or arena events)
+            if command in ("chat", "arena"):
                 data = handler(request, _emit)
             else:
                 data = handler(request)
@@ -159,6 +159,7 @@ class OlithBackend:
             "system_info":      self.cmd_system_info,
             "clear_memories":   self.cmd_clear_memories,
             "cancel":           self.cmd_cancel,
+            "arena":            self.cmd_arena,
             "list_sessions":    self.cmd_list_sessions,
             "load_session":     self.cmd_load_session,
             "new_session":      self.cmd_new_session,
@@ -298,6 +299,23 @@ class OlithBackend:
         self._cancel_event.set()
         log_info("chat", "Cancel requested")
         return {"message": "Cancelled"}
+
+    # ── arena ─────────────────────────────────────────────────────────────
+
+    def cmd_arena(self, request: dict, emit=None) -> dict:
+        """Lance une session de sparring Arena (Pyrolith vs Cryolith).
+        Sérialisé via _chat_lock (exclusif avec cmd_chat)."""
+        if not self._chat_lock.acquire(blocking=False):
+            log_info("arena", "Waiting for previous session to finish...")
+            self._chat_lock.acquire()
+
+        self._cancel_event.clear()
+
+        try:
+            from olith_arena import run_arena_sql_injection
+            return run_arena_sql_injection(emit, self._cancel_event)
+        finally:
+            self._chat_lock.release()
 
     # ── chat history ─────────────────────────────────────────────────────
     # TODO frontend: connecter list_sessions, load_session, new_session aux composants Svelte

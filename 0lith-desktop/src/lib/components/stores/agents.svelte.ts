@@ -1,4 +1,4 @@
-import type { Agent, AgentId, AgentStatus } from '../types/ipc';
+import type { Agent, AgentId, AgentStatus } from '../../types/ipc';
 
 let agents = $state<Agent[]>([]);
 let statuses = $state<Record<string, AgentStatus>>({

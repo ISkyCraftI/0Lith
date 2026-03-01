@@ -2,7 +2,7 @@
     import { marked } from "marked";
     import DOMPurify from "dompurify";
     import OLithEye from "./OLithEye.svelte";
-    import * as chat from "../stores/chat.svelte";
+    import * as chat from "./stores/chat.svelte";
     import type { ChatMessage } from "../types/ipc";
 
     interface Props {

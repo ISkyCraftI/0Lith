@@ -2,7 +2,7 @@
     import { tick } from "svelte";
     import ChatMessage from "./ChatMessage.svelte";
     import OLithEye from "./OLithEye.svelte";
-    import * as chat from "../stores/chat.svelte";
+    import * as chat from "./stores/chat.svelte";
 
     function formatElapsed(t: number): string {
         if (t < 60) return `${t.toFixed(1)}s`;
