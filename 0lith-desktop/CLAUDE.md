@@ -4,7 +4,7 @@
 0Lith is a **personal multi-agent AI cockpit** — not just a chatbot. It observes, learns, suggests, and executes. Tauri 2 + Svelte 5 (runes) + Python 3.12 backend. 5 AI agents run locally via Ollama on RTX 5070 Ti (16 GB VRAM). Zero cloud dependency.
 
 ## User
-- Name: **Matthieu**
+- Identity: anonymous (kept private in public repo)
 - Language: French (conversations, commit messages, UI labels in French preferred)
 - Priorities: Gaming (LoL etc.) coexists with 0Lith — VRAM is shared, never monopolized
 - Vision: Autonomous system that learns patterns, predicts needs, suggests proactively
@@ -16,7 +16,7 @@
 | **1 — SUGGEST** | Proactive notifications, recommendations | None (notification) |
 | **2 — ACT** | Write/send/modify/execute | **EXPLICIT user approval** |
 
-**Absolute rule**: 0Lith NEVER performs Level 2 actions without Matthieu's explicit "go". No emails sent, no files modified, no messages posted autonomously. Ever.
+**Absolute rule**: 0Lith NEVER performs Level 2 actions without the User's explicit approval. No emails sent, no files modified, no messages posted autonomously. Ever.
 
 ## Tech Stack — Critical Rules
 - **Tauri 2** (NOT v1) — APIs are completely different. Reference: https://v2.tauri.app
@@ -112,6 +112,7 @@ Separate Python process from olith_core.py. Launched in parallel by Tauri.
 ```
 
 ## Known Gotchas
+- **#User tag**: When an agent is blocked and needs human input, it emits `#User <question>` on its own line. `olith_tasks.py` detects this and appends to `~/.0lith/Tasks/User_needed.md`. On each chat, `resolve_completed()` removes lines marked `[x]`. IPC commands: `list_tasks`, `resolve_tasks`.
 - **qwen3 /no_think**: qwen3 models use `<think>...</think>` by default. Mem0 fact extraction breaks without `/no_think`. Class-level monkey patch on `OllamaLLM.generate_response` is applied at module top of olith_core.py.
 - **Windows cp1252**: stdout must be forced to UTF-8 (`io.TextIOWrapper`) for emoji support.
 - **Hodolith routing**: Must strip `<think>` tags from qwen3 output before JSON parsing. Falls back to text matching if JSON parse fails.
@@ -180,7 +181,7 @@ Full research: `Reflexions/0Lith_Memory_Architecture.md` and `Reflexions/0Lith_E
 - [x] Accessibility — aria-labels InputBar (Annuler/Envoyer), ChatMessage (feedback), OLithEye tabindex fix
 - [ ] Backend: Standardize agent outputs to strict JSON schema (eliminates frontend parse bugs)
 - [ ] Frontend: Aerolith loading state UI ("Aerolith réfléchit… 3-5 min", progress bar, cancel)
-- [ ] Backend: Clarify Monolith/Aerolith boundary in Hodolith routing prompt (Monolith plans/reasons, Aerolith writes)
+- [x] Backend: Clarify Monolith/Aerolith boundary in Hodolith routing prompt (Monolith plans/reasons, Aerolith writes) — done, prompts rewritten in English with explicit boundary
 - [ ] Feature: Conversation deletion + multi-select
 
 ### 🟡 Medium — Month 2-3
@@ -339,6 +340,7 @@ Blue: MONITOR=3, ALERT=5,  BLOCK=15,  PATCH=10,  ISOLATE=20
 │   ├── olith_arena.py      # Arena sparring logic (5 rounds, scoring, review, emit helpers)
 │   ├── olith_watcher.py    # Background loop (proactive, file watcher, suggestions)
 │   ├── olith_memory_init.py # Agent identities + Mem0/Qdrant/Kuzu setup
+│   ├── olith_tasks.py      # #User tag detection + User_needed.md management
 │   └── requirements.txt
 └── agents/                 # YAML agent configs (future)
 ```
@@ -346,7 +348,7 @@ Blue: MONITOR=3, ALERT=5,  BLOCK=15,  PATCH=10,  ISOLATE=20
 ## Design Principles
 1. **Offline first**: Everything local. No cloud dependency. No API keys needed.
 2. **VRAM is sacred**: Gaming always takes priority. 0Lith retreats silently.
-3. **Memory is the moat**: Aerolith's advantage over Claude Code isn't intelligence — it's knowing Matthieu's patterns, style, and history after months of context.
+3. **Memory is the moat**: 0Lith's advantage over cloud AI isn't intelligence — it's knowing the User's patterns, style, and history after months of context.
 4. **Each month is usable**: Never "under construction". Month 1 = good chat. Month 2 = proactive suggestions. Month 3 = pluggable agents. Stop at any point and it's still useful.
 5. **Level 2 never without permission**: The system suggests, never acts autonomously.
 6. **Sovereign by design**: AGPL license, zero cloud, zero telemetry. Data never leaves the machine.

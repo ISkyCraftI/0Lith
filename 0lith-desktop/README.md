@@ -24,6 +24,7 @@ Tauri 2 + Svelte 5 + Python frontend/backend for the 0Lith project.
     ├── olith_history.py    # Session persistence
     ├── olith_tools.py      # Sandboxed tools
     ├── olith_shared.py     # Shared helpers
+    ├── olith_tasks.py      # #User tag detection + task management
     ├── olith_memory_init.py
     └── requirements.txt
 ```

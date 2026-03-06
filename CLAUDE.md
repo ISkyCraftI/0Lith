@@ -55,6 +55,7 @@ python py-backend/olith_memory_init.py --reset  # Wipe + re-init
 **IPC**: Two persistent Python processes are spawned at startup via `tauri-plugin-shell`:
 - `olith_core.py` — reactive chat backend (command router → agent system → Ollama)
 - `olith_watcher.py` — proactive background loop (file watcher, suggestions)
+- `olith_tasks.py` — `#User` tag detection + `~/.0lith/Tasks/User_needed.md` management (imported by core and agents)
 
 Both communicate via **JSON line-delimited stdin/stdout** with UUID-correlated requests/responses. The Tauri process CWD is `src-tauri/`, so shell spawn paths use `../py-backend/`.
 
@@ -69,6 +70,7 @@ Both communicate via **JSON line-delimited stdin/stdout** with UUID-correlated r
 - qwen3 models emit `<think>...</think>` blocks — strip before parsing JSON routing responses
 - Gaming Mode unloads all models from VRAM; 0Lith must never monopolize the RTX 5070 Ti
 - `.claude/` and `__pycache__/` are in `.gitignore` ✓ — verified
+- `#User` tag — agents emit `#User <question>` on its own line when blocked; `olith_tasks.py` logs to `~/.0lith/Tasks/User_needed.md`; items marked `[x]` are auto-removed on next chat; IPC: `list_tasks`, `resolve_tasks`
 
 ## Immediate Sprint Priorities
 
@@ -94,7 +96,7 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 ### High — Next sprint
 4. **Agent output JSON schema**: standardize structured responses to prevent frontend parse bugs
 5. **Aerolith loading UI**: "Aerolith réfléchit… 3-5 min", progress bar, cancel — don't drop the 30B, make the wait dignified
-6. **Hodolith routing clarity**: Monolith *plans/reasons about* code, Aerolith *writes* code — update routing prompt
+6. ~~**Hodolith routing clarity**: Monolith *plans/reasons about* code, Aerolith *writes* code — update routing prompt~~ **DONE** — prompts rewritten in English with explicit Monolith/Aerolith boundary
 7. Conversation deletion + multi-select — 0.5 day
 
 ### Medium — Month 2-3

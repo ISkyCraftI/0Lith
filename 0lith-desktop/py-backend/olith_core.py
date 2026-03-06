@@ -95,6 +95,26 @@ class OlithBackend:
             self._pending_threads = [t for t in self._pending_threads if t.is_alive()]
             self._pending_threads.append(thread)
 
+    # ── tasks (#User) ───────────────────────────────────────────────────
+
+    def cmd_list_tasks(self, request: dict) -> dict:
+        """Retourne les tâches #User en attente dans User_needed.md."""
+        try:
+            from olith_tasks import list_pending_tasks
+            tasks = list_pending_tasks()
+        except Exception as e:
+            return {"tasks": [], "message": str(e)}
+        return {"tasks": tasks}
+
+    def cmd_resolve_tasks(self, request: dict) -> dict:
+        """Supprime les items [x] de User_needed.md et retourne le nombre supprimé."""
+        try:
+            from olith_tasks import resolve_completed
+            removed = resolve_completed()
+        except Exception as e:
+            return {"removed": 0, "message": str(e)}
+        return {"removed": removed}
+
     def shutdown(self):
         """Graceful shutdown: wait for pending threads, clean up Ollama process."""
         with self._threads_lock:
@@ -163,6 +183,8 @@ class OlithBackend:
             "list_sessions":    self.cmd_list_sessions,
             "load_session":     self.cmd_load_session,
             "new_session":      self.cmd_new_session,
+            "list_tasks":       self.cmd_list_tasks,
+            "resolve_tasks":    self.cmd_resolve_tasks,
         }
         return handlers.get(command)
 
@@ -279,6 +301,13 @@ class OlithBackend:
         bg_thread = result.pop("_thread", None)
         if bg_thread:
             self._track_thread(bg_thread)
+
+        # Nettoyer les tâches résolues [x] du fichier User_needed.md
+        try:
+            from olith_tasks import resolve_completed
+            resolve_completed()
+        except Exception as e:
+            log_warn("tasks", f"resolve_completed failed: {e}")
 
         # Persist user message + agent response
         if not result.get("cancelled"):

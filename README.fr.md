@@ -65,6 +65,7 @@ Les noms suivent une convention grecque : *Hodo-* (chemin), *Mono-* (unique), *A
 │  ├─ olith_watcher.py   Background proactif   │
 │  ├─ olith_history.py   Persistance sessions  │
 │  ├─ olith_tools.py     Outils sandboxés      │
+│  ├─ olith_tasks.py     Tag #User + tâches    │
 │  └─ olith_shared.py    Helpers partagés      │
 ├──────────────────────────────────────────────┤
 │  Infra locale                                 │
@@ -192,6 +193,7 @@ OLLAMA_KV_CACHE_TYPE=q8_0      # Cache KV quantifié
 - [x] UX Arena — bouton stop, verrouillage onglet, chrono, timer par mouvement, détails dépliables, badge ARENA, sélecteur scénario, dots progression rounds, symboles Unicode, animation chargement, badge VICTOIRE, export session
 - [x] Robustesse Arena — timeouts adaptatifs par modèle, fallback auto qwen3:14b, séquences de types forcées, fenêtre contexte 2 rounds, session 30 min
 - [x] Logs de session Arena (`~/.0lith/arena_logs/`) — fichier `.jsonl` par session avec les réponses LLM brutes
+- [x] Système de tâches `#User` — les agents signalent leurs blocages dans `~/.0lith/Tasks/User_needed.md`, nettoyé automatiquement au prochain message
 
 ## Roadmap
 

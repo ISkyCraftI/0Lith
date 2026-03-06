@@ -65,6 +65,7 @@ Agent names follow a Greek convention: *Hodo-* (path), *Mono-* (single), *Aero-*
 │  ├─ olith_watcher.py   Proactive background  │
 │  ├─ olith_history.py   Session persistence   │
 │  ├─ olith_tools.py     Sandboxed tools       │
+│  ├─ olith_tasks.py     #User tag + tasks     │
 │  └─ olith_shared.py    Shared helpers        │
 ├──────────────────────────────────────────────┤
 │  Local Infrastructure                         │
@@ -192,6 +193,7 @@ OLLAMA_KV_CACHE_TYPE=q8_0      # Quantized KV cache
 - [x] Arena UX — stop button, tab lock, elapsed chrono, per-move timer, expandable details, ARENA badge, scenario selector, round progress dots, Unicode move symbols, loading animation, winner badge, session export
 - [x] Arena robustness — adaptive timeouts per model, auto-fallback to qwen3:14b on short/failed responses, forced move sequences, 2-round context window, 30-min session budget
 - [x] Arena session logs (`~/.0lith/arena_logs/`) — per-session `.jsonl` with raw LLM responses for debugging
+- [x] `#User` task system — agents flag blockers to `~/.0lith/Tasks/User_needed.md`, auto-cleaned on next message
 
 ## Roadmap
 
