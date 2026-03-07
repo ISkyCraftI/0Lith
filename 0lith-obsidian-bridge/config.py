@@ -41,7 +41,7 @@ EMBEDDING_DIMS: int = 1024
 
 # ── Watcher ──────────────────────────────────────────────────────────────────
 # Délai d'inactivité avant déclenchement de l'action IA (en secondes)
-WATCHER_INACTIVITY_SECONDS: int = int(os.getenv("WATCHER_INACTIVITY_SECONDS", "120"))
+WATCHER_INACTIVITY_SECONDS: int = int(os.getenv("WATCHER_INACTIVITY_SECONDS", "60"))
 
 # Cooldown par fichier pour éviter les boucles infinies après écriture
 WATCHER_COOLDOWN_SECONDS: int = int(os.getenv("WATCHER_COOLDOWN_SECONDS", "30"))

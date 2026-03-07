@@ -19,6 +19,7 @@ import json
 import time
 import argparse
 import requests
+from pathlib import Path
 from datetime import datetime
 
 # ============================================================================
@@ -26,6 +27,9 @@ from datetime import datetime
 # ============================================================================
 
 OLLAMA_URL = "http://localhost:11434"
+# Embedded Qdrant — path resolved relative to this script (no Docker required)
+QDRANT_DATA_PATH: Path = Path(__file__).parent / "qdrant_data"
+# Legacy Docker URL — kept for backward compat in callers that import QDRANT_URL
 QDRANT_URL = "http://localhost:6333"
 PYROLITH_URL = "http://localhost:11435"  # Docker DeepHat
 
@@ -49,8 +53,8 @@ MEM0_CONFIG = {
     "vector_store": {
         "provider": "qdrant",
         "config": {
-            "host": "localhost",
-            "port": 6333,
+            # Embedded mode — no Docker, data persisted in py-backend/qdrant_data/
+            "path": str(QDRANT_DATA_PATH),
             "collection_name": "olith_memories",
             "embedding_model_dims": 1024,       # Qwen3-Embedding default
         }
@@ -213,7 +217,7 @@ AGENT_RELATIONS = [
 # ============================================================================
 
 def check_service(name: str, url: str, timeout: int = 3) -> bool:
-    """Vérifie si un service est accessible."""
+    """Vérifie si un service HTTP est accessible."""
     try:
         r = requests.get(url, timeout=timeout)
         return r.status_code == 200
@@ -221,6 +225,101 @@ def check_service(name: str, url: str, timeout: int = 3) -> bool:
         return False
     except Exception:
         return False
+
+
+def check_qdrant_embedded(data_path: Path = None) -> bool:
+    """Vérifie si le Qdrant embarqué est accessible (crée le dossier si nécessaire)."""
+    if data_path is None:
+        data_path = QDRANT_DATA_PATH
+    try:
+        data_path.mkdir(parents=True, exist_ok=True)
+        from qdrant_client import QdrantClient
+        client = QdrantClient(path=str(data_path))
+        client.get_collections()
+        client.close()
+        return True
+    except Exception:
+        return False
+
+
+def migrate_from_docker_qdrant(data_path: Path = None) -> int:
+    """
+    Migre les vecteurs depuis Docker Qdrant (localhost:6333) vers le mode embarqué.
+
+    Tente une connexion au Qdrant Docker. Si la collection olith_memories existe
+    et contient des points, ils sont copiés vers le client embarqué.
+
+    Returns:
+        Nombre de points migrés (0 si Docker indisponible ou collection vide).
+    """
+    if data_path is None:
+        data_path = QDRANT_DATA_PATH
+    try:
+        from qdrant_client import QdrantClient
+        from qdrant_client.models import VectorParams, Distance, PointStruct
+
+        # Connexion au Qdrant Docker (timeout court — pas bloquant)
+        docker_client = QdrantClient(host="localhost", port=6333, timeout=3)
+        collections = [c.name for c in docker_client.get_collections().collections]
+
+        if "olith_memories" not in collections:
+            docker_client.close()
+            return 0
+
+        info = docker_client.get_collection("olith_memories")
+        if info.points_count == 0:
+            docker_client.close()
+            return 0
+
+        # Initialiser le client embarqué et créer la collection si absente
+        data_path.mkdir(parents=True, exist_ok=True)
+        embedded_client = QdrantClient(path=str(data_path))
+        embedded_cols = [c.name for c in embedded_client.get_collections().collections]
+
+        if "olith_memories" not in embedded_cols:
+            embedded_client.create_collection(
+                "olith_memories",
+                vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
+            )
+
+        # Copie de tous les points par pages de 100
+        migrated = 0
+        offset = None
+        while True:
+            results, next_offset = docker_client.scroll(
+                "olith_memories",
+                limit=100,
+                offset=offset,
+                with_vectors=True,
+                with_payload=True,
+            )
+            if results:
+                points = [
+                    PointStruct(id=p.id, vector=p.vector, payload=p.payload)
+                    for p in results
+                ]
+                embedded_client.upsert("olith_memories", points=points)
+                migrated += len(points)
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        embedded_client.close()
+        docker_client.close()
+        return migrated
+    except Exception:
+        return 0
+
+
+def _maybe_migrate():
+    """Lance la migration Docker→embarqué si le dossier embarqué est absent ou vide."""
+    if QDRANT_DATA_PATH.exists() and any(QDRANT_DATA_PATH.iterdir()):
+        return  # Données embarquées déjà présentes
+    migrated = migrate_from_docker_qdrant()
+    if migrated > 0:
+        print_ok(f"Migration Docker → embarqué : {migrated} vecteurs copiés")
+    else:
+        print_info("Qdrant embarqué vide — sera initialisé par Mem0 au premier usage")
 
 
 def check_ollama_model(model: str) -> bool:
@@ -278,14 +377,14 @@ def check_status() -> dict:
         print_fail(f"Ollama inaccessible ({OLLAMA_URL})")
         print_info("Lance Ollama : ollama serve")
 
-    # 2. Qdrant
-    qdrant_ok = check_service("Qdrant", f"{QDRANT_URL}/collections")
+    # 2. Qdrant embarqué (mode embedded — no Docker)
+    qdrant_ok = check_qdrant_embedded()
     status["qdrant"] = qdrant_ok
     if qdrant_ok:
-        print_ok(f"Qdrant actif ({QDRANT_URL})")
+        print_ok(f"Qdrant embarqué prêt ({QDRANT_DATA_PATH})")
     else:
-        print_fail(f"Qdrant inaccessible ({QDRANT_URL})")
-        print_info("Lance Qdrant : docker start olith-qdrant")
+        print_fail(f"Qdrant embarqué inaccessible ({QDRANT_DATA_PATH})")
+        print_info("pip install qdrant-client")
 
     # 3. Modèles Ollama
     print()
@@ -355,6 +454,9 @@ def check_status() -> dict:
 def init_memory(use_graph: bool = True):
     """Initialise Mem0 avec la config 0Lith."""
     from mem0 import Memory
+
+    # Migration Docker → embarqué si le dossier n'existe pas encore
+    _maybe_migrate()
 
     config = MEM0_CONFIG.copy()
 
@@ -718,9 +820,10 @@ def main():
     if not status.get("ollama"):
         print_fail("\nOllama est requis. Lance-le et réessaie.")
         sys.exit(1)
+    # Qdrant embarqué — créé automatiquement, pas de Docker requis
     if not status.get("qdrant"):
-        print_fail("\nQdrant est requis. Lance le conteneur Docker.")
-        sys.exit(1)
+        print_warn("\nQdrant embarqué inaccessible — vérifie l'installation de qdrant-client.")
+        print_info("pip install qdrant-client")
 
     # Vérifier si Kuzu est disponible
     use_graph = status.get("kuzu", False) and not args.no_graph
@@ -734,7 +837,7 @@ def main():
         memory = init_memory(use_graph=use_graph)
     except Exception as e:
         print_fail(f"\nErreur d'initialisation Mem0 : {e}")
-        print_info("Vérifie que Qdrant est bien lancé et que les modèles sont disponibles.")
+        print_info("Vérifie que qdrant-client est installé (pip install qdrant-client) et qu'Ollama tourne.")
         sys.exit(1)
 
     # --- Reset si demandé ---

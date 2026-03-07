@@ -25,6 +25,7 @@ import traceback
 from pathlib import Path
 from collections import deque
 
+import itertools
 import requests
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -39,6 +40,7 @@ from olith_shared import (
     extract_memories, memory_text,
     WATCHED_EXTENSIONS as _SHARED_WATCHED,
     IGNORED_DIRS as _SHARED_IGNORED,
+    TEXT_EXTENSIONS,
 )
 
 from olith_memory_init import (
@@ -46,6 +48,7 @@ from olith_memory_init import (
     OLLAMA_URL,
     QDRANT_URL,
     check_service,
+    check_qdrant_embedded,
 )
 
 # ============================================================================
@@ -57,6 +60,11 @@ SHADOW_THINK_INTERVAL = 300  # 5 minutes
 STATUS_INTERVAL = 30         # 30 seconds
 MAX_DIFF_FILES = 10
 HODOLITH_MODEL = "qwen3:1.7b"  # Small model only — VRAM is sacred
+
+# Shadow thinking tuning
+SHADOW_SNIPPET_LINES      = 30   # max lines read from a changed file for context
+SHADOW_MAX_FILES_PER_EVENT = 2   # predictions stored per file-change batch
+SHADOW_HODOLITH_TIMEOUT   = 25   # tighter timeout than general calls (25s vs 30s)
 
 WATCHED_EXTENSIONS = _SHARED_WATCHED
 IGNORED_DIRS = _SHARED_IGNORED
@@ -208,7 +216,7 @@ class OlithWatcher:
             if self.memory:
                 return True
             try:
-                if not check_service("Qdrant", f"{QDRANT_URL}/collections"):
+                if not check_qdrant_embedded():
                     return False
                 config = copy.deepcopy(MEM0_CONFIG)
                 try:
@@ -262,8 +270,164 @@ class OlithWatcher:
             log_warn("watcher_hodolith", f"Call failed: {e}")
             return None
 
+    # ── Shadow Thinking pipeline ──────────────────────────────────────────
+
+    def _extract_file_snippet(self, file_path: str) -> str:
+        """
+        Read up to SHADOW_SNIPPET_LINES lines from a changed file.
+
+        Returns an empty string if the file is binary, too large, gone, or
+        unreadable — never raises.
+        """
+        try:
+            p = Path(file_path)
+            if p.suffix.lower() not in TEXT_EXTENSIONS:
+                return ""
+            if not p.exists() or p.stat().st_size > 500_000:  # skip > 500 KB
+                return ""
+            with p.open(encoding="utf-8", errors="replace") as fh:
+                lines = list(itertools.islice(fh, SHADOW_SNIPPET_LINES))
+            return "".join(lines)
+        except Exception:
+            return ""
+
+    def _call_hodolith_json(self, prompt: str, timeout: int = SHADOW_HODOLITH_TIMEOUT) -> "dict | None":
+        """
+        Call Hodolith and parse the response as JSON.
+
+        3-level fallback:
+          1. Direct json.loads()
+          2. Regex extract first {...} object
+          3. Synthetic dict with raw text + confidence=0.5
+
+        Returns None only when Ollama is unavailable.
+        Clamps confidence_score to [0.0, 1.0].
+        """
+        text = self._call_hodolith(prompt, timeout=timeout)
+        if text is None:
+            return None
+
+        result = None
+
+        # Level 1: clean JSON
+        try:
+            result = json.loads(text.strip())
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Level 2: first JSON object embedded in prose
+        if result is None:
+            import re as _re
+            m = _re.search(r'\{.*?\}', text, _re.DOTALL)
+            if m:
+                try:
+                    result = json.loads(m.group(0))
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        # Level 3: store raw text with neutral confidence
+        if result is None:
+            result = {"prediction": text[:300], "confidence_score": 0.5}
+
+        # Normalize — ensure required keys and valid range
+        if "prediction" not in result:
+            result["prediction"] = result.get("text", str(result))
+        try:
+            result["confidence_score"] = max(0.0, min(1.0, float(result.get("confidence_score", 0.5))))
+        except (TypeError, ValueError):
+            result["confidence_score"] = 0.5
+
+        return result
+
+    def _pick_shadow_files(self, changes: dict) -> "list[tuple[str, str]]":
+        """
+        Return up to SHADOW_MAX_FILES_PER_EVENT (path, event_type) tuples,
+        ordered by usefulness for shadow prediction.
+
+        Priority: modified > created > other; .py > .ts/.svelte > .rs > rest.
+        """
+        event_order = {"modified": 0, "created": 1}
+        ext_score   = {".py": 4, ".ts": 3, ".svelte": 3, ".rs": 2}
+
+        def _priority(item):
+            path, event_type = item
+            return (
+                event_order.get(event_type, 2),
+                -ext_score.get(Path(path).suffix.lower(), 1),
+            )
+
+        sorted_items = sorted(changes.items(), key=_priority)
+        return sorted_items[:SHADOW_MAX_FILES_PER_EVENT]
+
+    def _shadow_think_file(self, file_path: str, event_type: str) -> None:
+        """
+        Shadow thinking pipeline for a single changed file.
+
+        ─ Level 0 (observe): reads file snippet
+        ─ Level 1 (suggest): calls Hodolith, stores prediction in Mem0
+
+        NEVER emits to the UI. The prediction surfaces naturally when
+        olith_core.py's memory search retrieves it during a relevant chat.
+
+        Mem0 entry structure:
+            text     : "Shadow prediction for <path>: <prediction>\\nFile event: <type>. Confidence: <n>."
+            metadata : {type: shadow_thinking, user_id: hodolith,
+                        file_path, event_type, confidence_score, source: file_change, timestamp}
+        """
+        if self.paused:
+            return
+
+        # Time-windowed dedup: same file+event within the same minute → skip
+        dedup_key = hashlib.md5(
+            f"{file_path}:{event_type}:{int(time.time() // 60)}".encode()
+        ).hexdigest()[:10]
+        if dedup_key in self.recent_suggestions:
+            return
+        self.recent_suggestions.append(dedup_key)
+
+        # Compute display path
+        rel_path = file_path
+        if self.watch_dir:
+            try:
+                rel_path = str(Path(file_path).relative_to(self.watch_dir))
+            except ValueError:
+                pass
+
+        snippet = self._extract_file_snippet(file_path)
+        snippet_info = f"{min(snippet.count(chr(10)) + 1, SHADOW_SNIPPET_LINES)} premières lignes" if snippet else "contenu non disponible"
+
+        prompt = (
+            f"Fichier {event_type} : {rel_path}\n\n"
+            f"Extrait ({snippet_info}) :\n"
+            f"```\n{snippet[:1200]}\n```\n\n"
+            f"Réponds UNIQUEMENT avec ce JSON (rien d'autre) :\n"
+            f'{{\"prediction\": \"prochaine action probable du développeur en 1-2 phrases\", \"confidence_score\": 0.0}}\n\n'
+            f"confidence_score entre 0.0 (incertain) et 1.0 (très probable)."
+        )
+
+        result = self._call_hodolith_json(prompt, timeout=SHADOW_HODOLITH_TIMEOUT)
+        if result is None:
+            return  # Ollama unavailable — skip silently
+
+        mem_text = (
+            f"Shadow prediction for {rel_path}: {result['prediction']}\n"
+            f"File event: {event_type}. Confidence: {result['confidence_score']:.2f}."
+        )
+        self._store_shadow_thinking(mem_text, {
+            "file_path": str(rel_path),
+            "event_type": event_type,
+            "confidence_score": result["confidence_score"],
+            "source": "file_change",
+        })
+
     def analyze_changes(self, changes: dict):
-        """Analyze file changes and emit suggestions."""
+        """
+        Dispatch file-change events to two independent pipelines:
+
+        1. UI notification — instant, no LLM, always fires.
+        2. Shadow thinking  — per-file Hodolith prediction stored in Mem0 only
+                              (daemon threads, never blocks, never emits to UI).
+        """
         if self.paused or not changes:
             return
 
@@ -280,36 +444,30 @@ class OlithWatcher:
 
         change_summary = "\n".join(summary_lines)
 
-        # Deduplicate
+        # Dedup UI notifications (same batch of changes = one emit)
         content_hash = hashlib.md5(change_summary.encode()).hexdigest()[:8]
         if content_hash in self.recent_suggestions:
             return
         self.recent_suggestions.append(content_hash)
 
-        # Try AI analysis (graceful degradation if Ollama is down)
-        analysis = self._call_hodolith(
-            f"Fichiers modifies dans le projet:\n{change_summary}\n\n"
-            f"Quel est le prochain pas logique? Que devrait faire le developpeur?"
+        # ── Pipeline 1: UI notification (instant, no LLM) ────────────────
+        n = len(changes)
+        emit_suggestion(
+            "file_change",
+            f"{n} fichier{'s' if n > 1 else ''} modifié{'s' if n > 1 else ''}.",
+            {"files": file_list, "diff_summary": change_summary},
         )
 
-        if analysis:
-            suggestion_id = emit_suggestion(
-                "file_change",
-                analysis,
-                {"files": file_list, "diff_summary": change_summary},
-            )
-            self._store_shadow_thinking(
-                f"File changes detected: {change_summary}\nAnalysis: {analysis}",
-                {"suggestion_id": suggestion_id, "type": "file_change"},
-            )
-        else:
-            # Ollama unavailable — emit a simpler suggestion without AI
-            if len(changes) >= 3:
-                emit_suggestion(
-                    "file_change",
-                    f"{len(changes)} fichiers modifies recemment.",
-                    {"files": file_list, "diff_summary": change_summary},
-                )
+        # ── Pipeline 2: Shadow thinking (silent, per-file, daemon threads) ─
+        # Picks top 2 files by priority (.py > .ts/.svelte > .rs, modified > created).
+        # Each thread calls Hodolith and stores the prediction in Mem0.
+        # Returns in ~1ms — LLM work happens entirely in background.
+        for file_path, event_type in self._pick_shadow_files(changes):
+            threading.Thread(
+                target=self._shadow_think_file,
+                args=(file_path, event_type),
+                daemon=True,
+            ).start()
 
     def _store_shadow_thinking(self, text: str, metadata: dict):
         """Store pre-analyzed result in Mem0 with shadow_thinking tag."""
@@ -408,14 +566,11 @@ class OlithWatcher:
             )
 
             if analysis:
+                # Store in Mem0 only — surfaces when user asks a related question.
+                # Never emitted to the UI directly (Level 0: observe).
                 self._store_shadow_thinking(
                     f"Shadow thinking: {analysis}",
-                    {"type": "shadow"},
-                )
-                emit_suggestion(
-                    "shadow",
-                    analysis,
-                    {"shadow_query": "proactive analysis"},
+                    {"source": "periodic_cycle"},
                 )
         except Exception as e:
             log_warn("watcher_shadow", f"Shadow think cycle failed: {e}")

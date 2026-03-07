@@ -70,7 +70,7 @@ Agent names follow a Greek convention: *Hodo-* (path), *Mono-* (single), *Aero-*
 ├──────────────────────────────────────────────┤
 │  Local Infrastructure                         │
 │  ├─ Ollama             LLM inference         │
-│  ├─ Qdrant             Vector database       │
+│  ├─ Qdrant (embedded)  Vector database       │
 │  ├─ Mem0               Intelligent memory    │
 │  └─ Docker             Pyrolith isolation    │
 └──────────────────────────────────────────────┘
@@ -99,7 +99,7 @@ Agent names follow a Greek convention: *Hodo-* (path), *Mono-* (single), *Aero-*
 ## Prerequisites
 
 - [Ollama](https://ollama.com) **≥ 0.16.1** — required for RTX 5070 Ti / Blackwell GPU support (0.15.x silently falls back to CPU)
-- [Docker Desktop](https://docker.com) — for Qdrant vector DB and Pyrolith sandbox
+- [Docker Desktop](https://docker.com) — for the Pyrolith sandbox only (Qdrant runs embedded, no container needed)
 - [Node.js](https://nodejs.org) ≥ 18
 - [Rust](https://rustup.rs) (for Tauri compilation)
 - **Python 3.12** — not 3.13+, Kuzu graph DB is incompatible
@@ -123,9 +123,7 @@ ollama pull hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF  # Cryolith
 
 ```bash
 # 3. Start Docker services
-# Qdrant vector database (planned migration to embedded mode — Docker will no longer be required)
-docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
-  -v ~/.qdrant/storage:/qdrant/storage qdrant/qdrant
+# Qdrant runs in embedded mode — no container needed (data stored in py-backend/qdrant_data/)
 
 # Pyrolith — red team agent (isolated Ollama instance)
 docker run -d --name pyrolith -p 11435:11434 --gpus all ollama/ollama
@@ -167,7 +165,7 @@ OLLAMA_KV_CACHE_TYPE=q8_0      # Quantized KV cache
 | Backend | Python 3.12 | Agents, routing, memory, tools |
 | Inference | Ollama (llama.cpp) | Quantized GGUF models Q4_K_M |
 | Embeddings | qwen3-embedding:0.6b | #1 MTEB Multilingual, 1024 dims, code-aware |
-| Memory | Mem0 + Qdrant | Fact extraction, semantic search |
+| Memory | Mem0 + Qdrant (embedded) | Fact extraction, semantic search — no Docker |
 | Graph | Kuzu (optional) | Knowledge graph, multi-hop relations |
 | Isolation | Docker | Sandbox for the offensive agent |
 | Styling | TailwindCSS 4 + bits-ui | UI components, dark theme |
@@ -194,6 +192,7 @@ OLLAMA_KV_CACHE_TYPE=q8_0      # Quantized KV cache
 - [x] Arena robustness — adaptive timeouts per model, auto-fallback to qwen3:14b on short/failed responses, forced move sequences, 2-round context window, 30-min session budget
 - [x] Arena session logs (`~/.0lith/arena_logs/`) — per-session `.jsonl` with raw LLM responses for debugging
 - [x] `#User` task system — agents flag blockers to `~/.0lith/Tasks/User_needed.md`, auto-cleaned on next message
+- [x] **Shadow Thinking** — background Hodolith predicts your next move on every file save, stores proactive predictions in Mem0 (`shadow_thinking` tag); surfaces automatically when you ask a related question
 
 ## Roadmap
 
@@ -208,9 +207,10 @@ DONE ─────────────────────────
 ✅ Security : filesystem sandbox, lane queue, IPC cancel, retry + backoff
 ✅ Persistence : JSON sessions, history sidebar
 ✅ Arena : Pyrolith vs Cryolith SQL Injection sparring (5 rounds, live, score + review)
+✅ Qdrant embedded mode (no Docker — data in py-backend/qdrant_data/)
+✅ Shadow Thinking (Hodolith predicts next move per file save, stored silently in Mem0)
 
 SHORT TERM ──────────────────────────────────
-⬜ Shadow Thinking (proactive memory anticipation via Mem0)
 ⬜ OLithEye animated SVG (dynamic logo, color per agent)
 ⬜ Sidebar tabs (Agents / History separated)
 ⬜ MCP Server for Zed.dev

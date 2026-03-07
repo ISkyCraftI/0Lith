@@ -135,10 +135,21 @@ class VaultWatcher:
             if path in self._processing:
                 return
 
-        # Ignorer si en cooldown
+        # Si en cooldown : programmer un rattrapage après expiration plutôt que d'ignorer
         with self._cooldowns_lock:
             expire = self._cooldowns.get(path, 0)
-            if time.time() < expire:
+            remaining = expire - time.time()
+            if remaining > 0:
+                with self._timers_lock:
+                    if path not in self._timers:
+                        timer = threading.Timer(
+                            remaining + 0.5,
+                            self._trigger,
+                            args=(path,),
+                        )
+                        timer.daemon = True
+                        timer.start()
+                        self._timers[path] = timer
                 return
 
         with self._timers_lock:

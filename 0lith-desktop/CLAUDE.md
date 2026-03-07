@@ -31,7 +31,7 @@
 - Shell permissions in `src-tauri/capabilities/default.json` (NOT tauri.conf.json)
 - Python backend: `py-backend/olith_core.py` — persistent process, not spawn-per-request
 - Background loop: `py-backend/olith_watcher.py` — separate process for proactive features (Phase 3)
-- Memory: Mem0 + Qdrant (Docker, planned migration to embedded `QdrantClient(path="./qdrant_data")`) + optional Kuzu graph
+- Memory: Mem0 + Qdrant (embedded `QdrantClient(path="./qdrant_data")`, no Docker) + optional Kuzu graph
 - Embeddings: qwen3-embedding:0.6b (1024 dimensions) via Ollama
 
 ## The 5 Agents (Cybersecurity Dock V1)
@@ -118,7 +118,8 @@ Separate Python process from olith_core.py. Launched in parallel by Tauri.
 - **Hodolith routing**: Must strip `<think>` tags from qwen3 output before JSON parsing. Falls back to text matching if JSON parse fails.
 - **Pyrolith Docker**: Uses Ollama API (`/api/chat`, `/api/tags`), NOT OpenAI-compatible endpoints. Current setup is **not hardened** — pending: run as non-root, `--cap-drop=ALL`, isolated bridge network with no outbound internet.
 - **Aerolith 30B**: Exceeds 16 GB VRAM, Ollama does CPU offload. Expect 3-5 min responses. Timeout set to 600s. Frontend MUST handle slow responses gracefully (progress indicator, no freeze). Don't remove the 30B — make the wait dignified.
-- **Mem0 + Qdrant**: Qdrant must be running before olith_core.py starts. `docker start qdrant`. Planned migration to embedded mode (`QdrantClient(path="./qdrant_data")`) to eliminate Docker dependency for Qdrant — recollection dimensions (1024) unchanged.
+- **Mem0 + Qdrant**: Runs in embedded mode (`QdrantClient(path="./qdrant_data")`). No Docker required — `qdrant_data/` is created automatically on first use. Known quirk: `delete_collection` updates `meta.json` but leaves `storage.sqlite` on disk; `olith_memory_init.py` and tests handle this by wiping the physical folder before recreating. Recollection dimensions: 1024.
+- **Shadow Thinking**: `olith_watcher.py` stores per-file Hodolith predictions in Mem0 with `type: "shadow_thinking"`, `confidence_score` (0–1), `file_path`, `source: "file_change"`. Max 2 predictions per file-change batch (prioritises `.py` > `.ts`/`.svelte` > `.rs`, `modified` > `created`). Predictions are **never emitted to the UI** — they surface automatically when `search_memories()` in `olith_agents.py` runs a semantic search during a related chat. Key methods: `_extract_file_snippet()`, `_call_hodolith_json()`, `_pick_shadow_files()`, `_shadow_think_file()`.
 - **Kuzu**: Optional. Only works with Python 3.12. System works fine without it (vector-only mode).
 - **Memory token overflow**: Mem0 can inject too many retrieved memories into small model contexts (Hodolith 1.7B, Cryolith 8B). Implement a hard token budget (≤ 512 tokens for memory context) to prevent attention saturation.
 - **Monolith/Aerolith boundary**: Monolith *reasons and plans about* code; Aerolith *writes* code. Hodolith routing prompt currently captures this but the distinction should be explicit: never route "how to approach this algorithm" to Aerolith, never route "write this function" to Monolith.
@@ -168,8 +169,8 @@ Full research: `Reflexions/0Lith_Memory_Architecture.md` and `Reflexions/0Lith_E
 - [x] Launch: AGPL-3.0 license added (LICENSE at root), English README (README.md), French copy kept as README.fr.md
 
 ### 🔴 Critical — Do now
-- [ ] Phase 3: Shadow Thinking (proactive memory preparation) — watcher shadow loop exists, needs Mem0 wiring
-- [ ] Infra: Switch Qdrant to embedded mode (`QdrantClient(path="./qdrant_data")`) — eliminates Docker dependency for Qdrant entirely
+- [x] Phase 3: Shadow Thinking — `_shadow_think_file()` in olith_watcher.py: per-file Hodolith prediction stored in Mem0 (`shadow_thinking` tag, `confidence_score`); never emitted to UI; surfaces via normal memory retrieval in chat
+- [x] Infra: Switch Qdrant to embedded mode (`QdrantClient(path="./qdrant_data")`) — eliminates Docker dependency for Qdrant entirely
 - [ ] Security: Harden Pyrolith Docker — non-root user, `--cap-drop=ALL`, isolated bridge network, no outbound internet
 
 ### 🟠 High — Next sprint
@@ -239,7 +240,7 @@ Full analysis: `Reflexions/Etude de Marché.md`.
 - Build: `npm run tauri build`
 - Type check: `npm run check`
 - Python backend deps: `cd py-backend && pip install -r requirements.txt`
-- Qdrant Docker: `docker start qdrant` (port 6333) — *pending migration to embedded mode*
+- Qdrant embedded: no Docker needed — data auto-created in `py-backend/qdrant_data/`
 - Pyrolith Docker: `docker start pyrolith` (port 11435, needs `--gpus all`) — *pending security hardening*
 - Memory init: `cd py-backend && python olith_memory_init.py`
 - Memory test: `cd py-backend && python olith_memory_init.py --test`

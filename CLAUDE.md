@@ -39,7 +39,7 @@ npm run check
 pip install -r py-backend/requirements.txt
 
 # External services (must be running before dev)
-docker start qdrant        # Qdrant vector DB on :6333 — pending migration to embedded mode
+# Qdrant: no Docker needed — embedded mode, data in py-backend/qdrant_data/ (auto-created)
 docker start pyrolith      # Pyrolith LLM on :11435 — pending Docker security hardening
 
 # Memory management
@@ -89,7 +89,7 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 8. r/LocalLLaMA launch post preparation
 
 ### Critical — Infrastructure & Security
-1. **Qdrant embedded mode**: replace Docker with `QdrantClient(path="./qdrant_data")` in `olith_memory_init.py` — removes `docker start qdrant` requirement entirely
+1. ~~**Qdrant embedded mode**: replace Docker with `QdrantClient(path="./qdrant_data")` in `olith_memory_init.py` — removes `docker start qdrant` requirement entirely~~ **DONE**
 2. **Pyrolith Docker hardening**: non-root user, `--cap-drop=ALL`, isolated bridge network, no outbound internet by default
 3. **Shadow Thinking** — 2-3 days *(olith_watcher.py shadow loop exists; Mem0 pre-answer storage needs wiring to chat)*
 
@@ -121,21 +121,6 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 
 **Window**: 18-36 months before Big Tech (Apple, Microsoft, Google) ships competitive local multi-agent desktop tools.
 
-See `Reflexions/Etude de Marché.md` and `Reflexions/0Lith_et_marche_potentiel.md` for full analysis.
-
-## Reflexions Reference
-
-The `Reflexions/` folder contains research and strategy documentation:
-
-| File | Content |
-|------|---------|
-| `0Lith_Memory_Architecture.md` | Full technical spec: Mem0 + Qdrant + Kuzu architecture, why NOT a Bibliolith LLM, multi-agent scoping, 5-level memory hierarchy |
-| `0Lith_Embeddings_Memory_Research.md` | Embedding model comparison (Qwen3 vs Snowflake), MemOS/Memory-R1/Mem-α breakthroughs, phase roadmap |
-| `Etude de Marché.md` | Market analysis ($30B cybersec AI), competitive landscape (25+ tools), regulatory tailwinds, business model, launch strategy |
-| `Matrice Einsenhower.md` | Priority matrix for current sprint — repo cleanup, English README, AGPL, demo, launch prep |
-| `IDEAS.md` | Full backlog with status tracking (same as root IDEAS.md, synced copy) |
-| `Mission.md` | Original project charter with phase specs (same as root Mission.md, synced copy) |
-| `idées de noms agents.md` | Agent naming conventions for future docks |
 
 ## Git specifiactions
 

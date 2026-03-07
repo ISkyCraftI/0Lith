@@ -40,6 +40,7 @@ from olith_memory_init import (
     QDRANT_URL,
     PYROLITH_URL,
     check_service,
+    check_qdrant_embedded,
     check_ollama_model,
     register_agent_identities,
     register_agent_relations,
@@ -193,7 +194,7 @@ class OlithBackend:
     def cmd_status(self, request: dict) -> dict:
         """Retourne l'etat de tous les services et modeles."""
         if self.gaming_mode:
-            qdrant_ok = check_service("Qdrant", f"{QDRANT_URL}/collections")
+            qdrant_ok = check_qdrant_embedded()
             return {
                 "ollama": False,
                 "qdrant": qdrant_ok,
@@ -206,7 +207,7 @@ class OlithBackend:
             }
 
         ollama_ok = check_service("Ollama", OLLAMA_URL)
-        qdrant_ok = check_service("Qdrant", f"{QDRANT_URL}/collections")
+        qdrant_ok = check_qdrant_embedded()
         pyrolith_ok = check_service("Pyrolith", f"{PYROLITH_URL}/api/tags")
 
         models = {}
@@ -548,10 +549,7 @@ class OlithBackend:
         """Initialise Mem0 si pas deja fait."""
         if self.memory:
             return
-        try:
-            if not check_service("Qdrant", f"{QDRANT_URL}/collections"):
-                return
-        except Exception:
+        if not check_qdrant_embedded():
             return
 
         use_graph = True
