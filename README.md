@@ -193,6 +193,10 @@ OLLAMA_KV_CACHE_TYPE=q8_0      # Quantized KV cache
 - [x] Arena session logs (`~/.0lith/arena_logs/`) — per-session `.jsonl` with raw LLM responses for debugging
 - [x] `#User` task system — agents flag blockers to `~/.0lith/Tasks/User_needed.md`, auto-cleaned on next message
 - [x] **Shadow Thinking** — background Hodolith predicts your next move on every file save, stores proactive predictions in Mem0 (`shadow_thinking` tag); surfaces automatically when you ask a related question
+- [x] **TimeTree calendar sync** (`0lith-obsidian-bridge`) — exports TimeTree calendar via `timetree-exporter`, parses `.ics`, computes free slots; automatic fallback to `Arkhe/Weekly/disponibilites.md` when the scraper fails
+- [x] **Deterministic daily planner** (`0lith-obsidian-bridge/scheduler.py`) — energy-band scheduling (high→9-12h, medium→13-17h, low→17-22h), incremental update preserving `[x]` completed tasks, Day Planner-compatible Obsidian output, hourly-cron safe
+- [x] **Windows Task Scheduler integration** (`setup_scheduler_task.ps1`) — registers hourly job (08:00-22:00, session-only), weekly log rotation (`logs/YYYY-Www.log`), idempotent setup/teardown
+- [x] **Startup health checks** (`api/health_check.py`) — Ollama reachability, required models, vault readability, daily plans folder, TimeTree env vars, scheduler.py importability; CLI with ✅/❌/⚠️ output and exit code
 
 ## Roadmap
 
@@ -209,6 +213,10 @@ DONE ─────────────────────────
 ✅ Arena : Pyrolith vs Cryolith SQL Injection sparring (5 rounds, live, score + review)
 ✅ Qdrant embedded mode (no Docker — data in py-backend/qdrant_data/)
 ✅ Shadow Thinking (Hodolith predicts next move per file save, stored silently in Mem0)
+✅ TimeTree sync (0lith-obsidian-bridge — free slot ingestion for daily planner, .ics fallback)
+✅ Deterministic daily planner (scheduler.py — energy-band greedy, incremental [x] preservation, no LLM)
+✅ Windows Task Scheduler integration (setup_scheduler_task.ps1 — hourly 08-22h, weekly log rotation)
+✅ Startup health checks (api/health_check.py — Ollama, vault, env, scheduler import)
 
 SHORT TERM ──────────────────────────────────
 ⬜ OLithEye animated SVG (dynamic logo, color per agent)
@@ -223,7 +231,7 @@ MEDIUM TERM ──────────────────────�
 
 LONG TERM ───────────────────────────────────
 ⬜ Google Takeout ingestion pipeline
-⬜ Calendar + health data integration
+✅ Calendar integration — TimeTree sync + deterministic daily planner (scheduler.py → Obsidian vault)
 ⬜ Per-agent LoRA fine-tuning (QLoRA via Unsloth)
 ⬜ Multi-machine network (Tailscale)
 ⬜ MemOS migration (when mature)

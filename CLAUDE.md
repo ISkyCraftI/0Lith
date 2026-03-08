@@ -8,11 +8,22 @@ The git root is `C:\Users\skycr\Perso\0Lith\`. The actual application lives in `
 
 ```
 0Lith/
-├── 0lith-desktop/      # Tauri 2 + Svelte 5 + Python desktop app
-│   ├── src/            # Svelte 5 frontend
-│   ├── src-tauri/      # Rust/Tauri 2 shell + capabilities
-│   └── py-backend/     # Python 3.12 multi-agent backend
-└── Reflexions/         # Research docs, market analysis, strategy
+├── 0lith-desktop/           # Tauri 2 + Svelte 5 + Python desktop app
+│   ├── src/                 # Svelte 5 frontend
+│   ├── src-tauri/           # Rust/Tauri 2 shell + capabilities
+│   └── py-backend/          # Python 3.12 multi-agent backend
+├── 0lith-obsidian-bridge/   # Obsidian vault ↔ 0Lith pipeline
+│   ├── scheduler.py             # Daily planner — deterministic, no LLM, hourly cron
+│   ├── setup_scheduler_task.ps1 # Registers Windows Task Scheduler job (hourly 08-22h)
+│   ├── remove_scheduler_task.ps1# Unregisters the task
+│   ├── api/
+│   │   ├── health_check.py      # Startup health checks (Ollama, vault, env vars)
+│   │   ├── scheduler_agent.py   # (legacy) LLM-based plan generator — superseded by scheduler.py
+│   │   ├── timetree_sync.py     # TimeTree → .ics → free slots
+│   │   ├── obsidian_reader.py   # Vault scan + task index (mtime cache)
+│   │   └── task_parser.py       # Parses Obsidian task syntax (Dataview + emoji)
+│   └── config.py                # Loads C:\Users\skycr\Perso\.env
+└── Reflexions/                  # Research docs, market analysis, strategy
 ```
 
 ## Common Commands
@@ -35,8 +46,25 @@ npm run tauri build
 # TypeScript/Svelte type check
 npm run check
 
-# Python deps
+# Python deps — desktop backend
 pip install -r py-backend/requirements.txt
+
+# Python deps — Obsidian bridge
+cd ../0lith-obsidian-bridge
+pip install -r requirements.txt
+
+# Health check (from 0lith-obsidian-bridge/)
+python api/health_check.py           # All checks, exit 0/1
+
+# TimeTree sync (from 0lith-obsidian-bridge/)
+python -m api.timetree_sync          # Free slots today (TimeTree or fallback)
+
+# Daily Planner — scheduler (from 0lith-obsidian-bridge/)
+python scheduler.py --dry-run        # Test run without writing to vault
+python scheduler.py                  # Run and write to Daily Plans/
+.\setup_scheduler_task.ps1           # Register hourly Windows Task (08:00-22:00)
+.\remove_scheduler_task.ps1          # Remove the task
+Get-ScheduledTask -TaskName "0Lith Daily Planner"   # Verify registration
 
 # External services (must be running before dev)
 # Qdrant: no Docker needed — embedded mode, data in py-backend/qdrant_data/ (auto-created)
@@ -100,14 +128,16 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 7. Conversation deletion + multi-select — 0.5 day
 
 ### Medium — Month 2-3
-8. Startup health checks (Ollama up? models pulled? Pyrolith container ready?)
-9. Memory token budget (≤ 512 tokens injected into small model contexts)
-10. Monthly memory pruning (Monolith reviews Mem0 entries > 30 days)
-11. Training Mode (Pyrolith vs Cryolith CVE sparring overnight + morning briefing)
-12. Sidebar tabs (Agents / History) — 1 day
-13. OLithEye animated SVG — 1-2 days
-14. MCP Server for Zed.dev — 2-3 days
-15. Agents enfichables YAML (dock architecture) — 2-3 days
+8. ~~**TimeTree sync** (`0lith-obsidian-bridge/api/timetree_sync.py`): exports calendar via `timetree-exporter`, parses .ics, computes free slots; fallback on `Arkhe/Weekly/disponibilites.md`~~ **DONE** — tested end-to-end, live TimeTree export + fallback both operational
+9. ~~**Daily planner** (`0lith-obsidian-bridge/scheduler.py`): deterministic greedy scheduler — energy-band affinity (high→morning, medium→afternoon, low→evening), incremental update (preserves `[x]` completed blocks), hourly cron-safe, no LLM~~ **DONE**
+10. Startup health checks (Ollama up? models pulled? Pyrolith container ready?)
+11. Memory token budget (≤ 512 tokens injected into small model contexts)
+12. Monthly memory pruning (Monolith reviews Mem0 entries > 30 days)
+13. Training Mode (Pyrolith vs Cryolith CVE sparring overnight + morning briefing)
+14. Sidebar tabs (Agents / History) — 1 day
+15. OLithEye animated SVG — 1-2 days
+16. MCP Server for Zed.dev — 2-3 days
+17. Agents enfichables YAML (dock architecture) — 2-3 days
 
 ## Business Context
 
@@ -122,6 +152,6 @@ From `Reflexions/Matrice Einsenhower.md` — ranked by urgency and impact:
 **Window**: 18-36 months before Big Tech (Apple, Microsoft, Google) ships competitive local multi-agent desktop tools.
 
 
-## Git specifiactions
+## Git specifications
 
 Never push on Github by adding Claude or Claude Code as a coauthor. ISkyCraftI has to push alone.

@@ -12,9 +12,12 @@ Mécanisme :
   - Cooldown de 30s après traitement (évite re-trigger immédiat).
 """
 
+import json
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from watchdog.events import FileSystemEventHandler, FileModifiedEvent, FileCreatedEvent
@@ -28,9 +31,14 @@ from config import (
     OLITH_DIR,
     WATCHER_INACTIVITY_SECONDS,
     WATCHER_COOLDOWN_SECONDS,
+    OBSIDIAN_API_URL,
+    OBSIDIAN_API_KEY,
+    WATCHER_SCAN_INTERVAL_SECONDS,
 )
 
 from api.action_engine import ActionEngine, ActionResult
+
+_BUILTIN_TAGS = ("TODO", "Rewrite", "Summarize", "Translate")
 
 
 class VaultWatcher:
@@ -69,6 +77,7 @@ class VaultWatcher:
 
         self._observer: Observer | None = None
         self._running = False
+        self._api_warned = False
 
     # ── Cycle de vie ──────────────────────────────────────────────────────────
 
@@ -83,6 +92,9 @@ class VaultWatcher:
         self._observer.schedule(handler, str(VAULT_PATH), recursive=True)
         self._observer.start()
         self._running = True
+        if WATCHER_SCAN_INTERVAL_SECONDS > 0:
+            scan_thread = threading.Thread(target=self._scan_loop, daemon=True)
+            scan_thread.start()
         print(
             f"[VaultWatcher] Démarré — vault: {VAULT_PATH} "
             f"— inactivité: {self._inactivity}s — cooldown: {self._cooldown}s"
@@ -230,6 +242,39 @@ class VaultWatcher:
             pass
 
         return True
+
+    def _obsidian_search(self, tag: str) -> list[str]:
+        """Interroge l'API Obsidian Local REST pour trouver les fichiers contenant un tag."""
+        if not OBSIDIAN_API_KEY:
+            if not self._api_warned:
+                print("[VaultWatcher] OBSIDIAN_API_KEY non configuré — scan périodique désactivé")
+                self._api_warned = True
+            return []
+        url = f"{OBSIDIAN_API_URL}/search/simple/?query=tag%3A%23{tag}"
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {OBSIDIAN_API_KEY}"})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read())
+                return [str(VAULT_PATH / item["filename"]) for item in data if "filename" in item]
+        except Exception:
+            if not self._api_warned:
+                print(f"[VaultWatcher] Obsidian API non disponible ({OBSIDIAN_API_URL}) — scan désactivé")
+                self._api_warned = True
+            return []
+
+    def _scan_loop(self) -> None:
+        """Thread daemon — scan périodique via Obsidian Local REST API."""
+        while self._running:
+            time.sleep(WATCHER_SCAN_INTERVAL_SECONDS)
+            if not self._running:
+                break
+            all_tags = list(self._engine.get_all_actions().keys())
+            seen: set[str] = set()
+            for tag in all_tags:
+                for path in self._obsidian_search(tag):
+                    if path not in seen and self._should_watch(path):
+                        seen.add(path)
+                        self.on_file_changed(path)
 
     def _record_history(self, result: ActionResult) -> None:
         """Enregistre une action dans l'historique interne."""
