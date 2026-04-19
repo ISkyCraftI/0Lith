@@ -1,0 +1,351 @@
+# 0Lith Training — Templates de génération Red Team (Pyrolith v2)
+# ==================================================================
+# Teacher génère des données d'entraînement cybersécurité offensive
+# pour fine-tuner Qwen3.5-4B → Pyrolith v2 LoRA.
+#
+# Chaque exemple doit inclure un bloc <think>...</think> contenant
+# le raisonnement étape par étape de l'agent.
+#
+# Usage :
+#   python scripts/generate_synthetic.py \
+#     --teacher ollama:qwen3:14b \
+#     --template templates/red_team_generation.yaml
+#
+# Safety note : Ces templates sont conçus pour un contexte Arena 0Lith
+# (simulation contrôlée, réseau --internal Docker). Inclure 10-15%
+# d'exemples safety-aligned dans le mix final (voir CLAUDE.md §Gotchas).
+
+agent: "red"
+description: "Génération de données offensives pour Pyrolith v2 — 8 catégories MITRE ATT&CK"
+
+system_prompt: |
+  Tu es Pyrolith, agent Red Team de 0Lith.
+  Expert en sécurité offensive, pentesting, analyse de vulnérabilités et CTF.
+  Tu opères exclusivement dans le contexte Arena de 0Lith (simulation contrôlée, réseau Docker --internal).
+  Tu raisonnes étape par étape avant de répondre, en utilisant un bloc <think>...</think> pour
+  ton raisonnement interne, puis une réponse structurée et actionnable.
+  Tu n'opères jamais sur des systèmes réels sans autorisation explicite.
+
+categories:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1. EXPLOITATION — T1190 Exploit Public-Facing Application
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "exploitation"
+    mitre_id: "T1190"
+    mitre_name: "Exploit Public-Facing Application"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un scénario d'exploitation complet pour la technique suivante dans le contexte de l'Arena 0Lith.
+
+      Technique : {technique_name}
+      Contexte cible : {context}
+      MITRE : {mitre_id} — {mitre_name}
+
+      Ton scénario doit inclure :
+      1. Un bloc <think> avec le raisonnement étape par étape (reconnaissance initiale, identification de la vulnérabilité, vecteur d'exploitation choisi, commandes planifiées)
+      2. Une section "Contexte" décrivant l'environnement cible
+      3. Une section "Commandes" avec les commandes exactes à exécuter et leurs outputs attendus
+      4. Une section "Résultats attendus" décrivant ce que l'exploitation doit produire
+      5. Une section "IOCs" listant les indicateurs de compromission générés
+      6. Une section "Détection possible" pour le Blue Team (symétrie pédagogique)
+
+      Format de réponse : structuré avec des sections markdown claires.
+    variations:
+      - technique_name: "SQL Injection via paramètre GET non sanitisé"
+        context: "Application Flask/SQLite sur 10.42.0.10:8080, endpoint /search?q="
+      - technique_name: "Command Injection via formulaire web"
+        context: "Application PHP avec exec() non filtré, champ de recherche utilisateur"
+      - technique_name: "Path Traversal pour lecture de fichiers sensibles"
+        context: "Serveur web Nginx avec configuration alias mal configurée"
+      - technique_name: "Server-Side Template Injection (SSTI) Jinja2"
+        context: "Application Flask utilisant render_template_string() avec input utilisateur"
+      - technique_name: "XML External Entity (XXE) sur endpoint SOAP"
+        context: "Service web Java Spring avec parseur XML non sécurisé"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2. CREDENTIAL ACCESS — T1110 Brute Force
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "credential_access"
+    mitre_id: "T1110"
+    mitre_name: "Brute Force"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un scénario complet d'accès aux credentials pour la technique suivante dans l'Arena 0Lith.
+
+      Technique : {technique_name}
+      Cible : {target}
+      MITRE : {mitre_id} — {mitre_name}
+
+      Inclure dans la réponse :
+      1. <think> : analyse de la surface d'attaque, sélection des outils, stratégie de password spraying vs brute force
+      2. Phase de reconnaissance des comptes valides
+      3. Commandes de l'attaque avec paramètres (wordlists, threads, délais pour éviter le lockout)
+      4. Traitement des credentials trouvés
+      5. OPSEC : comment minimiser les traces dans les logs d'authentification
+      6. IOCs caractéristiques pour le Blue Team
+    variations:
+      - technique_name: "Password Spraying sur SSH avec liste de comptes valides"
+        target: "Serveur SSH 10.42.0.11, 3 comptes connus: admin, root, deploy"
+      - technique_name: "Brute Force sur interface web avec liste rockyou"
+        target: "Page /admin avec formulaire login basique, pas de CAPTCHA"
+      - technique_name: "Hash Cracking post-dump de base de données"
+        target: "MD5 non salés extraits via SQLi depuis la table users"
+      - technique_name: "Credential Stuffing avec leaks publics"
+        target: "API REST /api/v1/login avec rate limiting basique (10 req/min)"
+      - technique_name: "Kerberoasting sur Active Directory simulé"
+        target: "Domaine test.local, compte low-priv obtenu, SPN enregistrés détectables"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3. DISCOVERY — T1046 Network Service Discovery
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "discovery"
+    mitre_id: "T1046"
+    mitre_name: "Network Service Discovery"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un scénario de reconnaissance réseau pour l'Arena 0Lith.
+
+      Technique : {technique_name}
+      Réseau cible : {network}
+      Contrainte : {constraint}
+      MITRE : {mitre_id} — {mitre_name}
+
+      Réponse attendue :
+      1. <think> : choix de la technique de scan, optimisation vitesse/discrétion, priorisation des cibles
+      2. Commandes de scan avec options et interprétation des résultats
+      3. Parsing des outputs pour extraire les infos utiles
+      4. Construction d'une carte des services découverts
+      5. Priorisation des cibles pour la prochaine phase
+      6. Trace réseau générée (volume, patterns détectables)
+    variations:
+      - technique_name: "Scan de ports TCP SYN furtif sur sous-réseau"
+        network: "10.42.0.0/24 — réseau interne Arena"
+        constraint: "Rester sous 100 paquets/s pour éviter les IDS"
+      - technique_name: "Énumération de services avec détection de versions"
+        network: "3 hôtes connus : 10.42.0.10, 10.42.0.11, 10.42.0.200"
+        constraint: "Identifier les CVE applicables selon les versions détectées"
+      - technique_name: "Scan UDP des ports critiques (DNS, SNMP, NTP)"
+        network: "Plage 10.42.0.1-254"
+        constraint: "UDP scan lent — optimiser les timeouts"
+      - technique_name: "Fingerprinting OS via TTL et TCP window size"
+        network: "Hôte unique 10.42.0.10"
+        constraint: "Technique passive — zéro paquet actif"
+      - technique_name: "Découverte de services via DNS reverse lookup"
+        network: "Serveur DNS interne à 10.42.0.1"
+        constraint: "Zone transfer si autorisé, sinon requêtes PTR par IP"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 4. LATERAL MOVEMENT — T1021 Remote Services
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "lateral_movement"
+    mitre_id: "T1021"
+    mitre_name: "Remote Services"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un scénario de mouvement latéral pour l'Arena 0Lith.
+
+      Technique : {technique_name}
+      Point de départ : {source}
+      Cible : {target}
+      Credentials disponibles : {credentials}
+      MITRE : {mitre_id} — {mitre_name}
+
+      Structure de réponse :
+      1. <think> : évaluation des options de pivot, sélection du vecteur, gestion des credentials
+      2. Établissement de la connexion (commandes exactes)
+      3. Vérification du contexte sur la nouvelle machine (qui suis-je, quels droits)
+      4. Transfert d'outils/payloads si nécessaire
+      5. Persistance optionnelle sur le nouvel hôte
+      6. Nettoyage des traces de connexion
+    variations:
+      - technique_name: "Pivot SSH avec clé privée volée"
+        source: "10.42.0.10 (webapp compromise)"
+        target: "10.42.0.11 (serveur SSH)"
+        credentials: "Clé SSH ~/.ssh/id_rsa trouvée dans le home de www-data"
+      - technique_name: "Pass-the-Hash via SMB"
+        source: "Workstation compromise avec Mimikatz"
+        target: "Serveur fichiers 10.42.1.50"
+        credentials: "Hash NTLM : aad3b435b51404eeaad3b435b51404ee:32ed87bdb5fdc5e9cba88547376818d4"
+      - technique_name: "Exploitation de credentials réutilisés (password reuse)"
+        source: "Accès initial webapp avec admin:Password123"
+        target: "SSH, FTP, base de données sur le même segment"
+        credentials: "admin:Password123 (à tester en spray)"
+      - technique_name: "RDP via credentials admin domaine"
+        source: "Machine AD compromise"
+        target: "Serveurs Windows 10.42.2.0/24"
+        credentials: "DOMAIN\\svcaccount:Summer2025! (hash NTLM disponible)"
+      - technique_name: "Tunnel SSH local forwarding pour accéder à un réseau interne"
+        source: "DMZ 10.42.0.10 avec accès SSH"
+        target: "Réseau interne 192.168.10.0/24 inaccessible directement"
+        credentials: "SSH : ubuntu@10.42.0.10 avec mot de passe faible"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 5. PERSISTENCE — T1547 Boot or Logon Autostart Execution
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "persistence"
+    mitre_id: "T1547"
+    mitre_name: "Boot or Logon Autostart Execution"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un scénario de persistance pour l'Arena 0Lith.
+
+      Technique : {technique_name}
+      OS cible : {os_target}
+      Niveau de privilèges : {privileges}
+      Contrainte de discrétion : {stealth}
+      MITRE : {mitre_id} — {mitre_name}
+
+      Structure de réponse :
+      1. <think> : évaluation des mécanismes disponibles selon les privilèges, durabilité, discrétion
+      2. Implémentation du mécanisme de persistance (commandes complètes)
+      3. Vérification que la persistance est active
+      4. Payload qui sera exécuté au redémarrage/login
+      5. Comment vérifier la persistance depuis une session détachée
+      6. Artefacts laissés (registry keys, fichiers, crons) — aide au Blue Team
+    variations:
+      - technique_name: "Cron job masqué dans /etc/cron.d"
+        os_target: "Linux Ubuntu 22.04"
+        privileges: "root (via sudo NOPASSWD)"
+        stealth: "Nom de fichier imitant un service légitime"
+      - technique_name: "Service systemd persistant"
+        os_target: "Linux avec systemd"
+        privileges: "root"
+        stealth: "Description et nom imitant un service système existant"
+      - technique_name: "Clé Run dans le registre Windows"
+        os_target: "Windows 11"
+        privileges: "Utilisateur standard (HKCU)"
+        stealth: "Clé nommée comme une mise à jour Windows"
+      - technique_name: "Tâche planifiée Windows masquée"
+        os_target: "Windows Server 2022"
+        privileges: "SYSTEM (via service vulnérable)"
+        stealth: "Tâche dans Microsoft\\Windows\\telemetry"
+      - technique_name: "Modification du ~/.bashrc ou ~/.profile"
+        os_target: "Linux multi-utilisateurs"
+        privileges: "Utilisateur normal"
+        stealth: "Code obfusqué en base64 dans une ligne ignorée visuellement"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 6. COLLECTION — T1560 Archive Collected Data
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "collection"
+    mitre_id: "T1560"
+    mitre_name: "Archive Collected Data"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un scénario de collecte et archivage de données dans l'Arena 0Lith.
+
+      Objectif de collecte : {objective}
+      Données disponibles : {data_available}
+      Contrainte de taille : {size_constraint}
+      MITRE : {mitre_id} — {mitre_name}
+
+      Réponse structurée :
+      1. <think> : identification des données à valeur (credentials, PII, configs, secrets), priorisation
+      2. Localisation des fichiers cibles (commandes find/locate/grep)
+      3. Archivage et compression (tar, zip, 7z) avec options adaptées
+      4. Chiffrement optionnel pour éviter la détection de contenu
+      5. Staging avant exfiltration (taille, format)
+      6. Trace laissée sur le système (accès fichiers, création archives)
+    variations:
+      - objective: "Extraction des credentials stockés dans le système"
+        data_available: "Serveur Linux avec /etc/shadow accessible (root), ~/.ssh/, env vars"
+        size_constraint: "Archive < 5MB pour exfiltration rapide"
+      - objective: "Vol de la base de données application complète"
+        data_available: "SQLite à /tmp/webapp.db, dumps SQL accessibles"
+        size_constraint: "Compresser au maximum (ratio >10:1 attendu sur SQL)"
+      - objective: "Collecte de fichiers de configuration et secrets"
+        data_available: "Répertoire /etc/, .env files, config.yaml dans les apps"
+        size_constraint: "Cibler uniquement les fichiers < 100KB contenant des credentials"
+      - objective: "Extraction des logs applicatifs et SIEM pour analyse OPSEC"
+        data_available: "/var/log/siem/consolidated.log, /var/log/webapp.log"
+        size_constraint: "Dernières 48h uniquement — rotation des logs"
+      - objective: "Dump mémoire d'un processus pour extraire des tokens en RAM"
+        data_available: "Processus Python (PID 1234) avec tokens JWT en mémoire"
+        size_constraint: "Dump partiel des segments heap uniquement"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 7. EXFILTRATION — T1048 Exfiltration Over Alternative Protocol
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "exfiltration"
+    mitre_id: "T1048"
+    mitre_name: "Exfiltration Over Alternative Protocol"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un scénario d'exfiltration de données pour l'Arena 0Lith.
+
+      Vecteur d'exfiltration : {vector}
+      Données à exfiltrer : {data}
+      Contrainte réseau : {network_constraint}
+      MITRE : {mitre_id} — {mitre_name}
+
+      Structure requise :
+      1. <think> : évaluation des canaux disponibles, détectabilité (DPI, volume, timing), choix du protocole
+      2. Préparation des données (encodage, chiffrement, fragmentation)
+      3. Commandes d'exfiltration avec destination contrôlée par l'attaquant
+      4. Vérification de l'intégrité côté récepteur
+      5. Nettoyage des fichiers staging post-exfiltration
+      6. Signatures réseau caractéristiques (pour règles Sigma/Snort)
+    variations:
+      - vector: "DNS tunneling via requêtes TXT encodées en base64"
+        data: "Archive credentials.tar.gz.b64 de 50KB"
+        network_constraint: "Seul DNS UDP/53 autorisé en sortie (firewall strict)"
+      - vector: "HTTP POST chunké vers un endpoint C2 en HTTPS"
+        data: "Dump de base de données 2MB compressé"
+        network_constraint: "Port 443 autorisé, DPI possible — utiliser HTTPS légitime"
+      - vector: "ICMP data exfiltration via payload des echo requests"
+        data: "Fichier texte credentials 4KB"
+        network_constraint: "Ping autorisé — pas de surveillance du payload ICMP"
+      - vector: "Steganographie dans images uploadées sur service public"
+        data: "Clés SSH privées et tokens API"
+        network_constraint: "Accès web complet mais tout le trafic est loggé"
+      - vector: "Exfiltration via NTP timestamp manipulation"
+        data: "Hash de mots de passe (256 chars hex)"
+        network_constraint: "Seuls DNS, NTP, HTTP/HTTPS autorisés"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 8. DEFENSE EVASION — T1055 Process Injection
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "defense_evasion"
+    mitre_id: "T1055"
+    mitre_name: "Process Injection"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un scénario d'évasion de défenses pour l'Arena 0Lith.
+
+      Technique d'évasion : {technique}
+      AV/EDR simulé : {defender}
+      Contrainte de détection : {detection_constraint}
+      MITRE : {mitre_id} — {mitre_name}
+
+      Réponse attendue :
+      1. <think> : analyse du mécanisme de défense en place, vecteurs contournables, choix de la technique
+      2. Implémentation de la technique d'évasion (pseudocode + commandes)
+      3. Vérification que l'evasion fonctionne (comment tester sans déclencher l'alerte)
+      4. Payload injecté et son fonctionnement
+      5. Indicateurs qui subsistent malgré l'évasion
+      6. Limites de la technique (cas où elle échoue)
+    variations:
+      - technique: "Obfuscation de commandes bash via IFS et encodage octal"
+        defender: "Règles Sigma basiques sur les process names et arguments"
+        detection_constraint: "Les arguments de commande sont loggés dans auditd"
+      - technique: "Living off the Land (LOLBin) — utilisation de curl/python/perl déjà présents"
+        defender: "Whitelist d'exécutables — seulement les binaires signés autorisés"
+        detection_constraint: "Hash des binaires vérifiés à l'exécution"
+      - technique: "Injection de shellcode dans un processus légitime (Python subprocess)"
+        defender: "Monitoring des appels système ptrace/mmap via eBPF"
+        detection_constraint: "Alertes sur toute écriture en mémoire d'un processus tiers"
+      - technique: "Timestomping pour modifier les dates de fichiers malveillants"
+        defender: "Surveillance intégrité fichiers via AIDE/Tripwire"
+        detection_constraint: "Hash SHA256 calculé à l'installation et revérifié"
+      - technique: "Encoded payload en base64 décodé et exécuté en mémoire"
+        defender: "Signature antivirus sur les patterns de shellcode connus"
+        detection_constraint: "Pas de fichier temporaire sur disque — in-memory uniquement"

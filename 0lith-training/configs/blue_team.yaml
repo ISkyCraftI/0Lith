@@ -1,0 +1,57 @@
+# 0Lith Training — Cryolith v2 (Blue Team)
+# Base: Qwen3.5-4B | bf16 LoRA | RTX 5070 Ti 16 GB
+# Référence: files/01_TRAINING_PLAN.md §3.2
+
+model:
+  base_model: "Qwen/Qwen3.5-4B"
+  max_seq_length: 2048         # Plafond training sur 16 GB
+  load_in_4bit: false          # PAS de QLoRA — déconseillé par Unsloth sur Qwen3.5
+  load_in_16bit: true          # bf16 LoRA obligatoire
+  dtype: bfloat16
+  full_finetuning: false
+
+lora:
+  r: 16                        # Rank inférieur : analyse > génération (suffit pour Blue)
+  lora_alpha: 16               # alpha == r (recommandation Unsloth pour Qwen3.5)
+  lora_dropout: 0
+  bias: "none"
+  use_gradient_checkpointing: "unsloth"  # "unsloth" — PAS true
+  random_state: 3407
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+training:
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8   # Effective batch size = 8
+  num_train_epochs: 3
+  learning_rate: 2.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  optim: adamw_8bit
+  fp16: false
+  bf16: true
+  logging_steps: 10
+  save_strategy: steps
+  save_steps: 100
+  output_dir: ./models/checkpoints/cryolith_v2_lora
+  seed: 42
+  # Fallback VRAM si OOM : réduire max_seq_length à 1024 ou gradient_accumulation_steps à 16
+
+export:
+  quantization_method: q5_k_m    # Q5 pour fine-tuné — pas Q4 (efface les subtilités LoRA)
+  output_dir: ./models/exported/cryolith_v2_gguf
+  ollama_model_name: cryolith-v2
+  num_ctx: 8192
+  # Template ChatML Qwen3.5 — NE PAS modifier (cause #1 de dégradation post-conversion)
+  # <|im_start|>role\ncontent<|im_end|>
+  system_prompt: >
+    Tu es Cryolith, agent Blue Team de 0Lith.
+    Expert en défense, analyse de logs, détection d'intrusions, incident response et threat hunting.
+    Tu génères des règles Sigma structurées et des analyses MITRE ATT&CK mappées.
+    Tu raisonnes étape par étape avant de répondre.

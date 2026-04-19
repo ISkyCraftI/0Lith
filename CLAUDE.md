@@ -23,6 +23,12 @@ The git root is `C:\Users\skycr\Perso\0Lith\`. The actual application lives in `
 │   │   ├── obsidian_reader.py   # Vault scan + task index (mtime cache)
 │   │   └── task_parser.py       # Parses Obsidian task syntax (Dataview + emoji)
 │   └── config.py                # Loads C:\Users\skycr\Perso\.env
+├── 0lith-training/              # Fine-tuning pipeline (Pyrolith v2 / Cryolith v2 LoRA on Qwen3.5-4B)
+│   ├── configs/                 # Hyperparamètres YAML (red_team, blue_team)
+│   ├── scripts/                 # validate_env.py + stubs train/export/eval
+│   ├── data/                    # raw/ processed/ synthetic/ dpo_pairs/
+│   ├── evals/                   # golden_test_set.jsonl + results/
+│   └── models/                  # checkpoints/ + exported GGUFs
 └── Reflexions/                  # Research docs, market analysis, strategy
 ```
 

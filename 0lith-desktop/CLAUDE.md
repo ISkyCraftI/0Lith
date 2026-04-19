@@ -124,8 +124,54 @@ Separate Python process from olith_core.py. Launched in parallel by Tauri.
 - **Memory token overflow**: Mem0 can inject too many retrieved memories into small model contexts (Hodolith 1.7B, Cryolith 8B). Implement a hard token budget (≤ 512 tokens for memory context) to prevent attention saturation.
 - **Monolith/Aerolith boundary**: Monolith *reasons and plans about* code; Aerolith *writes* code. Hodolith routing prompt currently captures this but the distinction should be explicit: never route "how to approach this algorithm" to Aerolith, never route "write this function" to Monolith.
 - **Agent output schema**: Agents return free-form text; the frontend parses it with regex/heuristics. A strict JSON schema for structured responses (especially tool calls and routing) would eliminate a class of UI parse bugs.
+- **Purple Team module** (`py-backend/purple/`): Game Master pour simulations adversariales Red vs Blue. Architecture : 80 % Python déterministe, 20 % LLM narratif uniquement. `ScenarioGenerator` est 100 % déterministe via seed (même seed = même scénario exact — testé). `CyberRange` génère un docker-compose.yml éphémère avec réseau `--internal` + gVisor. `Scorer` ne fait JAMAIS appel au LLM — vérifications binaires uniquement (flag exfiltré, Sigma valide, patch efficace). `SafetyChecker` doit passer avant tout match (gVisor, réseau isolé, ports Qdrant/Kuzu non exposés, token HMAC). Logs : `~/.0lith/arena_logs/`, DPO export : `~/.0lith/dpo_data/`. **Prérequis non encore implémentés** : gVisor installé, images Docker `0lith/vuln-*` buildées, token HMAC configuré. Dev mode : `PURPLE_SKIP_GVISOR=1`, `PURPLE_SKIP_TOKEN=1`. Dépendance : `aiohttp` (pour les appels LLM async).
+- **`olith_purple.py`** — **COMPLET + WIRÉ** : Processus IPC standalone (spawné par Tauri comme `olith_watcher.py`). 5 commandes : `purple_generate_scenario` (seed+difficulty→config JSON), `purple_start_match` (valide HMAC→safety checks→lance thread), `purple_match_status` (phase/rounds/elapsed), `purple_match_result` (MatchResult.to_dict()), `purple_stop_match` (cancel event). Token HMAC-SHA256 lu depuis `~/.0lith/sparring.key` ou `OLITH_SPARRING_SECRET` env var. Un seul match à la fois (`threading.Lock` non-bloquant). Timeout global 60 min (`asyncio.wait_for`). Match tourne dans un thread daemon (`asyncio.run()`). `threading.Event` passé directement comme `cancel_event` à `MatchProtocol` (compatible car seul `.is_set()` est utilisé). Events streamés via `status="purple"` sur le même `req_id`. **Wiring Tauri** : `python-purple` dans `capabilities/default.json` (shell:allow-spawn + shell:allow-execute) ; `lib.rs` émet `"app-quit"` avant `app.exit(0)` ; `src/lib/purple_ipc.ts` : types + fonctions `start/stop/generateScenario/startMatch/getMatchStatus/getMatchResult/stopMatch` — démarré ON DEMAND, s'arrête sur `"app-quit"`. **Reste à faire** : tab frontend `PurpleView.svelte`.
+- **Cyber Range Docker images** (`py-backend/docker/`) — **Phase 2 minimal** : 4 images buildées localement, taggées `0lith/<name>:latest`. Build order : `vuln-webapp` → `vuln-ssh` → `siem-lite` → `noise-gen`. Scripts de build/test dans `py-backend/docker/` (voir section Purple Team Commands ci-dessous). Images attendues par `cyber_range.py` : `0lith/vuln-webapp:latest`, `0lith/vuln-ssh:latest`, `0lith/noise-gen:latest`, `0lith/siem-lite:latest`. `docker/docker-compose.template.yml` : template de test manuel (réseau `10.42.0.0/24`, internal:true). **Flag injection** : `vuln-webapp` lit `FLAG_VALUE` depuis env var (injecté par `scenario_generator` via `env_overrides`) — défaut `FLAG{0lith_cyber_range_pwned}`. **vuln-ssh** : exception root (SSH requiert root pour bind :22 + chpasswd). **siem-lite** : port `5514/udp` (non-root) — pour port 514 standard, ajouter `CAP_NET_BIND_SERVICE`. **noise-gen** : génère du trafic HTTP bénin vers `/`, `/products`, `/search?q=...`, `/comment` — rend détection plus réaliste.
+- **DPO Exporter** (`purple/dpo_exporter.py`) — **COMPLET, testé (29/29)** : `DPOPair` utilise `source_match_id` (pas `match_id`) et a `score_delta: float`. Sept critères d'extraction déterministes — Red : `exploit_success_vs_failure` (exit_code=0 vs 1), `stealth_vs_detected` (IP/≥3 mots-clés détection), `technique_novelty_vs_repeat` (première occurrence MoveType vs répétition) ; Blue : `detection_hit_vs_miss`, `sigma_valid_matching_vs_invalid` (via Scorer.validate_sigma_rule), `patch_proposed_vs_absent` (mots-clés patch/fix/CVE), `no_disruption_vs_disruption` (phrases "shut down all services"). Règle immuable : `control_scenario=True` → liste vide, jamais exporté. `export_to_jsonl(pairs)` → format TRL `{"prompt","chosen","rejected"}` uniquement. `accumulate_pairs(min_pairs=500)` → compte dans `dpo_*.jsonl`. Cross-produit limité à `MAX_CROSS_PAIRS=4` pour éviter l'explosion combinatoire.
+- **Scorer** (`purple/scorer.py`) — **COMPLET, testé (40/40)** : `RedScore.total` et `BlueScore.total` sont des **champs** calculés via `__post_init__` (pas des méthodes — appeler `.total()` lèvera `TypeError`). `calculate_evasion_rate()` attend `red_actions: list[dict]` avec clés `"ip"`, `"commands"`, `"move_type"` (pas `list[str]`). `check_objective()` mode 3 (credential extract) ne s'active que si le `scenario.objective` contient "credential"/"password"/"admin"/"hash". `_check_root_cause()` cherche les IDs MITRE ATT&CK du scénario dans le texte Blue (ex: "T1190") — utiliser `scenario.mitre_techniques` pour construire les tests. `SigmaValidation.score_value` : 2 si valid+matching, 1 si valid sans match, 0 si invalide.
+- **ScenarioGenerator** (`purple/scenario_generator.py`) — **COMPLET, testé** : `generate(seed, difficulty)` déterministe. `to_docker_compose(config)` → YAML complet valide (internal network, gVisor, cap_drop, read_only, env vars vulns). `generate_briefings(config)` → tuple (red_brief, blue_brief) — asymétrie stricte : vulns/credentials jamais exposés, objectif absent du briefing Blue. `generate_control(seed, diff)` → scénario de benchmark (control_scenario=True, jamais en DPO). `generate_batch(count, diff, base_seed, control_ratio)` pour Training Mode nuit. Catalogue : 8 services (webapp/ssh/ftp/smb/dns/mail/db/log4j), 24 techniques MITRE ATT&CK, vulns par tier (easy/medium/hard), credentials faibles/forts selon difficulté, objectifs cohérents avec les services déployés.
+- **Purple Team safety** : Red n'a JAMAIS accès direct aux conteneurs — Purple exécute les commandes en proxy via `exec_command()`. Les collections Qdrant Red/Blue sont strictement séparées (pas de cross-contamination). Le réseau Docker du range est `--internal=true` — aucun conteneur ne peut atteindre internet ou l'hôte.
 - **WDAC/HVCI (dev machine)**: HVCI (Memory Integrity ON) + Smart App Control blocks unsigned Rust binaries. Fix: self-signed cert `CN=0Lith Dev` (thumbprint `DACA80CF...`) trusted in `LocalMachine\Root` + `TrustedPublisher`. Binary must be signed after each `cargo build` via `scripts/dev-sign.ps1`. Cargo target redirected to `AppData\Local\olith-build` (see `.cargo/config.toml`, gitignored). See top of `dev-sign.ps1` for one-time setup.
 - **Store import paths**: Stores live in `src/lib/components/stores/`. They must import types via `../../types/ipc` (NOT `../types/ipc`). Components import stores via `./stores/...` (relative to `lib/components/`).
+
+## Purple Team — Docker Cyber Range Commands
+
+```bash
+# Prérequis : se placer dans py-backend/docker/
+cd 0lith-desktop/py-backend/docker
+
+# Build les 4 images (vuln-webapp → vuln-ssh → siem-lite → noise-gen)
+./build_all.sh
+
+# Build force rebuild (sans cache Docker)
+./build_all.sh --no-cache
+
+# Tests d'intégration complets (5 tests : HTTP 200, SQLi FLAG{, SSH port, SIEM logs, noise-gen)
+./test_cyber_range.sh
+
+# Tests en mode debug (conserve les conteneurs après)
+./test_cyber_range.sh --keep
+
+# Démarrage manuel du range de test (subnet 10.42.1.0/24)
+docker compose -f docker-compose.test.yml up -d
+
+# Arrêt + nettoyage complet (volumes inclus)
+docker compose -f docker-compose.test.yml down --volumes --remove-orphans
+
+# Logs temps réel
+docker compose -f docker-compose.test.yml logs -f
+
+# Vérifier les tailles des images
+docker images "0lith/*"
+```
+
+**WSL2/Docker Desktop** : les IPs conteneurs (10.42.1.x) ne sont pas routables depuis l'hôte Windows.
+Les tests utilisent `docker exec` (intra-réseau) ou les ports exposés (`localhost:18080`, `localhost:12222`, `localhost:15514`).
+
+**gVisor** (`runsc`) : optionnel en développement, **requis en production** pour isoler les conteneurs vulnérables.
+- Dev : `PURPLE_SKIP_GVISOR=1` dans l'environnement
+- Prod : `runtime: runsc` dans docker-compose + `gvisor-containerd-shim` installé
+- `SafetyChecker` refuse de lancer un match si gVisor absent et `skip_safety=False`
 
 ## Color Scheme
 - Background primary: `#282C33`
@@ -184,6 +230,16 @@ Full research: `Reflexions/0Lith_Memory_Architecture.md` and `Reflexions/0Lith_E
 - [ ] Frontend: Aerolith loading state UI ("Aerolith réfléchit… 3-5 min", progress bar, cancel)
 - [x] Backend: Clarify Monolith/Aerolith boundary in Hodolith routing prompt (Monolith plans/reasons, Aerolith writes) — done, prompts rewritten in English with explicit boundary
 - [ ] Feature: Conversation deletion + multi-select
+- [x] Purple Team Phase 1: `olith_purple.py` — processus IPC standalone complet (5 commandes, HMAC token, single-match mutex, 60min timeout, streaming events)
+- [x] Purple Team Phase 1 — wiring Tauri : `capabilities/default.json` + `python-purple` spawn permission ; `lib.rs` émet `"app-quit"` avant `app.exit(0)` pour cleanup gracieux ; `src/lib/purple_ipc.ts` : types IPC complets + fonctions `start/stop/generateScenario/startMatch/getMatchStatus/getMatchResult/stopMatch` — processus démarré ON DEMAND (pas au boot), tué sur `"app-quit"` Tauri ou explicitement
+- [x] Purple Team Phase 1 — tab frontend : `PurplePanel.svelte` (config → match → résultats) + onglet Purple dans `TitleBar.svelte` + wiring `App.svelte` — 4 états (idle/generating/running/done), log live en temps réel, barres de score, métriques Red/Blue, compteur DPO
+- [x] Purple Team: images Docker Phase 2 minimal (vuln-webapp, vuln-ssh, noise-gen, siem-lite) + docker-compose.template.yml
+- [ ] Purple Team: builder les images (`cd py-backend/docker && docker build -t 0lith/vuln-webapp:latest ./vuln-webapp` etc.)
+- [x] Purple Team: implémenter les TODO dans `cyber_range.py` — `check_health()` TCP/HTTP/UDP réels (5 retries, 2s backoff, asyncio.gather parallèle), `exec_command()` security filter (docker/mount/nsenter/proc/IPs hors subnet), `read_siem_logs()` (tail_n=200, since_line incrémental), `cleanup_on_error()` (compose down --remove-orphans) — testé 44/44
+- [x] Purple Team: `match_protocol.py` complet — `_call_agent(agent, prompt, system, timeout) → str` Ollama direct + callable fallback, `_ollama_call()` messages structurés (system+history+user), `_strip_think()`, `_update_history()` (cap 4 entries / 2 rounds), `_inject_history_into_prompt()` (callable path), asymétrie Red/Blue garantie (Red ≠ SIEM, Blue ≠ commandes), `_call_agent_move()` wrapping AgentMove, backward-compat constructor (`red_llm`/`blue_llm` optionnels) — testé 42/42
+- [x] Purple Team: implémenter `_test_patch()` dans scorer.py (replay exploit sur conteneurs live) — extraction du dernier bloc code Blue avec keywords remédiation, replay exploit Red, asyncio.wait_for 15s par commande, conservatif (erreur → False) — testé 14/14
+- [x] Purple Team: scorer.py complet et testé (40/40) — RedScore, BlueScore, SigmaValidation, evasion rate, check_objective
+- [x] Purple Team: dpo_exporter.py complet et testé (29/29) — 7 critères, export TRL, accumulate_pairs
 
 ### 🟡 Medium — Month 2-3
 - [ ] Launch: Demo video 2-3 min (r/LocalLLaMA, Hacker News)
@@ -200,7 +256,7 @@ Full research: `Reflexions/0Lith_Memory_Architecture.md` and `Reflexions/0Lith_E
 - [ ] Game dev dock (Storylith, Artlith, Gamelith)
 - [ ] Personal dock (Schedulith, Econolith)
 - [ ] Google Takeout ingestion pipeline
-- [ ] Per-agent LoRA fine-tuning (QLoRA via Unsloth)
+- [ ] Per-agent LoRA fine-tuning — pipeline dans `0lith-training/` (Pyrolith v2 + Cryolith v2, bf16 LoRA sur Qwen3.5-4B)
 
 ## Launch Preparation
 
@@ -327,9 +383,10 @@ Blue: MONITOR=3, ALERT=5,  BLOCK=15,  PATCH=10,  ISOLATE=20
 │   ├── capabilities/default.json  # Window + shell permissions
 │   └── tauri.conf.json     # decorations: false (custom titlebar)
 ├── src/                    # Svelte 5 frontend
-│   ├── lib/components/     # TitleBar, Sidebar, ChatArea, ChatMessage, InputBar, StatusBar, ArenaView, ResizeHandles, OLithEye
+│   ├── lib/components/     # TitleBar, Sidebar, ChatArea, ChatMessage, InputBar, StatusBar, ArenaView, PurplePanel, ResizeHandles, OLithEye
 │   │   └── stores/         # pythonBackend, chat, agents, sessions, gaming, watcher, arena (.svelte.ts)
-│   ├── lib/types/ipc.ts    # Full IPC protocol types
+│   ├── lib/types/ipc.ts    # Full IPC protocol types (chat, arena, watcher)
+│   ├── lib/purple_ipc.ts   # Purple Team IPC types + process management (on-demand spawn)
 │   └── App.svelte
 ├── py-backend/             # Python backend
 │   ├── olith_core.py       # IPC chat router (reactive)
@@ -339,10 +396,34 @@ Blue: MONITOR=3, ALERT=5,  BLOCK=15,  PATCH=10,  ISOLATE=20
 │   ├── olith_history.py    # JSON session persistence (~/.0lith/chats/)
 │   ├── olith_shared.py     # Mem0 monkey-patch, think-block stripping, logging
 │   ├── olith_arena.py      # Arena sparring logic (5 rounds, scoring, review, emit helpers)
+│   ├── olith_purple.py     # Purple Team orchestrator entry point (IPC: "purple_match")
 │   ├── olith_watcher.py    # Background loop (proactive, file watcher, suggestions)
 │   ├── olith_memory_init.py # Agent identities + Mem0/Qdrant/Kuzu setup
 │   ├── olith_tasks.py      # #User tag detection + User_needed.md management
-│   └── requirements.txt
+│   ├── requirements.txt
+│   └── purple/             # Purple Team module (Game Master)
+│       ├── __init__.py
+│       ├── scenario_generator.py  # Scénarios déterministes (seed + difficulté, DAG services)
+│       ├── cyber_range.py         # Docker compose lifecycle (deploy/teardown/exec_command)
+│       ├── match_protocol.py      # Protocole 6 phases, asymétrie d'info Red/Blue
+│       ├── scorer.py              # Scoring 100 % déterministe (pas de LLM)
+│       ├── dpo_exporter.py        # Export paires chosen/rejected pour fine-tuning DPO
+│       └── safety_checks.py      # Vérifications pré-match (gVisor, réseau isolé, token HMAC)
+│   └── docker/             # Images Docker pour le Cyber Range
+│       ├── vuln-webapp/        # Flask app vulnérable (SQLi/XSS/Auth-Bypass) — 0lith/vuln-webapp:latest
+│       │   ├── Dockerfile
+│       │   └── app.py
+│       ├── vuln-ssh/           # Serveur SSH mal configuré — 0lith/vuln-ssh:latest
+│       │   ├── Dockerfile
+│       │   └── entrypoint.sh
+│       ├── noise-gen/          # Générateur de trafic légitime — 0lith/noise-gen:latest
+│       │   ├── Dockerfile
+│       │   └── generator.py
+│       ├── siem-lite/          # Collecteur syslog rsyslog — 0lith/siem-lite:latest
+│       │   ├── Dockerfile
+│       │   ├── rsyslog-siem.conf
+│       │   └── entrypoint.sh
+│       └── docker-compose.template.yml  # Template de test manuel Phase 2
 └── agents/                 # YAML agent configs (future)
 ```
 

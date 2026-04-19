@@ -2,9 +2,9 @@
     import { getCurrentWindow } from "@tauri-apps/api/window";
 
     interface Props {
-        activeTab: "chat" | "arena";
+        activeTab: "chat" | "arena" | "purple";
         arenaLocked?: boolean;
-        onTabChange: (tab: "chat" | "arena") => void;
+        onTabChange: (tab: "chat" | "arena" | "purple") => void;
         onToggleSidebar?: () => void;
     }
 
@@ -14,7 +14,7 @@
 
     let flashChat = $state(false);
 
-    function handleTabClick(tab: "chat" | "arena") {
+    function handleTabClick(tab: "chat" | "arena" | "purple") {
         if (tab === "chat" && arenaLocked) {
             flashChat = true;
             setTimeout(() => { flashChat = false; }, 500);
@@ -97,6 +97,13 @@
                 onclick={() => handleTabClick("arena")}
             >
                 Arena
+            </button>
+            <button
+                class="tab"
+                class:active={activeTab === "purple"}
+                onclick={() => handleTabClick("purple")}
+            >
+                Purple
             </button>
         </nav>
     </div>

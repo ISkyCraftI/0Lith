@@ -50,6 +50,33 @@ nul
 *.sln
 *.sw?
 
+# ===== Qdrant (embedded runtime data) =====
+# Keep meta.json (collection schema) but ignore live storage
+0lith-desktop/py-backend/qdrant_data/collection/
+
+# ===== 0Lith runtime output =====
+# Arena logs and DPO export written by olith_purple.py at runtime
+.0lith/arena_logs/
+.0lith/dpo_data/
+.0lith/Tasks/
+# SQLite databases (Qdrant storage, Kuzu graph)
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# ===== Training pipeline — large binaries =====
+# Model weights and optimizer states must not be committed to git
+# Use DVC, HuggingFace Hub, or local storage instead
+0lith-training/models/exported/**/*.safetensors
+0lith-training/models/exported/**/*.gguf
+0lith-training/models/checkpoints/**/adapter_model.safetensors
+0lith-training/models/checkpoints/**/optimizer.pt
+0lith-training/models/checkpoints/**/rng_state.pth
+0lith-training/models/checkpoints/**/scheduler.pt
+0lith-training/models/checkpoints/**/training_args.bin
+# Unsloth compiled kernel cache (auto-regenerated)
+0lith-training/unsloth_compiled_cache/
+
 # ===== Secrets / env =====
 .env
 .env.*
@@ -57,3 +84,4 @@ nul
 *.key
 *.pem
 secrets.json
+files/

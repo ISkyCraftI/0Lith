@@ -1,0 +1,108 @@
+# 0Lith — Cyber Range TEST compose
+# ============================================================
+# Subnet séparé (10.42.1.x) pour éviter les conflits avec la
+# prod (10.42.0.x). Ports exposés pour compatibilité WSL2/Windows
+# (les IPs conteneurs ne sont pas routables depuis l'hôte Windows).
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   docker compose -f docker-compose.test.yml down --volumes
+# ============================================================
+
+services:
+
+  vuln-webapp:
+    image: 0lith/vuln-webapp:latest
+    container_name: range-webapp-test
+    environment:
+      FLAG_VALUE: "FLAG{test_sqli_success_0lith}"
+      VULN_SQLI: "true"
+      VULN_XSS: "true"
+      VULN_AUTH_BYPASS: "true"
+    networks:
+      cyber-test:
+        ipv4_address: 10.42.1.10
+    ports:
+      - "18080:8080"    # Accès hôte WSL2/Windows
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/log/webapp
+
+  vuln-ssh:
+    image: 0lith/vuln-ssh:latest
+    container_name: range-ssh-test
+    environment:
+      ROOT_PASSWORD: "toor"
+      FLAG_CONTENT: "FLAG{test_ssh_root_0lith}"
+    networks:
+      cyber-test:
+        ipv4_address: 10.42.1.20
+    ports:
+      - "12222:22"      # Accès hôte WSL2/Windows
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/22"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 8s
+
+  noise-gen:
+    image: 0lith/noise-gen:latest
+    container_name: range-noise-test
+    environment:
+      TARGETS: "http://vuln-webapp:8080"
+      INTERVAL_MIN: "2"
+      INTERVAL_MAX: "5"
+    networks:
+      cyber-test:
+        ipv4_address: 10.42.1.100
+    depends_on:
+      vuln-webapp:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  siem-lite:
+    image: 0lith/siem-lite:latest
+    container_name: range-siem-test
+    networks:
+      cyber-test:
+        ipv4_address: 10.42.1.200
+    ports:
+      - "15514:5514/udp"  # Syslog UDP (optionnel — tests via docker exec)
+    healthcheck:
+      test: ["CMD", "test", "-f", "/var/log/siem/consolidated.log"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - siem-test-logs:/var/log/siem
+
+networks:
+  cyber-test:
+    driver: bridge
+    internal: true    # Pas d'accès internet depuis les conteneurs
+    ipam:
+      config:
+        - subnet: 10.42.1.0/24
+
+volumes:
+  siem-test-logs:

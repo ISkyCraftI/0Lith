@@ -24,6 +24,11 @@
           "name": "python-watcher",
           "cmd": "python",
           "args": ["../py-backend/olith_watcher.py"]
+        },
+        {
+          "name": "python-purple",
+          "cmd": "python",
+          "args": ["../py-backend/olith_purple.py"]
         }
       ]
     },
@@ -39,6 +44,11 @@
           "name": "python-watcher",
           "cmd": "python",
           "args": ["../py-backend/olith_watcher.py"]
+        },
+        {
+          "name": "python-purple",
+          "cmd": "python",
+          "args": ["../py-backend/olith_purple.py"]
         }
       ]
     }

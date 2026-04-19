@@ -80,6 +80,10 @@ pub fn run() {
                             let _ = app.emit("tray-gaming-toggle", ());
                         }
                         "quit" => {
+                            // Signal the frontend to stop background processes
+                            // (olith_purple.py if a match is active). OS will
+                            // also SIGKILL all children when the process exits.
+                            let _ = app.emit("app-quit", ());
                             app.exit(0);
                         }
                         _ => {}

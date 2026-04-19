@@ -6,6 +6,7 @@
     import TitleBar from "./lib/components/TitleBar.svelte";
     import ResizeHandles from "./lib/components/ResizeHandles.svelte";
     import ArenaView from "./lib/components/ArenaView.svelte";
+    import PurplePanel from "./lib/components/PurplePanel.svelte";
     import Sidebar from "./lib/components/Sidebar.svelte";
     import ChatArea from "./lib/components/ChatArea.svelte";
     import InputBar from "./lib/components/InputBar.svelte";
@@ -26,7 +27,7 @@
         LoadedModel,
     } from "./lib/types/ipc";
 
-    let activeTab = $state<"chat" | "arena">("chat");
+    let activeTab = $state<"chat" | "arena" | "purple">("chat");
     let statusInterval: ReturnType<typeof setInterval> | undefined;
     let ollamaOk = $state(false);
     let qdrantOk = $state(false);
@@ -223,8 +224,10 @@
                 onDismiss={handleDismissSuggestion}
             />
             <InputBar />
-        {:else}
+        {:else if activeTab === "arena"}
             <ArenaView />
+        {:else}
+            <PurplePanel modelNames={loadedModels.map(m => m.name)} />
         {/if}
     </div>
 </div>
