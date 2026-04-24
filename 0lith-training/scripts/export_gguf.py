@@ -291,10 +291,15 @@ def create_ollama_model(model_name: str, modelfile_path: Path) -> bool:
             capture_output=True,
             text=True,
             encoding="utf-8",
+            timeout=900,
         )
     except FileNotFoundError:
         print("  [ERREUR] ollama non trouvé dans PATH.")
         print("  Installer Ollama : https://ollama.com/download")
+        return False
+    except subprocess.TimeoutExpired:
+        print("  [ERREUR] Timeout (900s) — ollama create n'a pas répondu.")
+        print("  Vérifier qu'Ollama est en cours d'exécution et que le GGUF est valide.")
         return False
 
     if result.returncode != 0:

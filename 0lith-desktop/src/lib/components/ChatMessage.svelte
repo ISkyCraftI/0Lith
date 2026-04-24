@@ -14,9 +14,20 @@
     let showReasonInput = $state(false);
     let reasonText = $state("");
 
+    function stripThinking(content: string): string {
+        let s = content.replace(/<think>[\s\S]*?<\/think>/gi, "");
+        s = s.replace(/<think>[\s\S]*/i, "");
+        return s.trim();
+    }
+
+    let isActiveStream = $derived(
+        chat.isStreaming() &&
+        message.id === chat.getMessages().at(-1)?.id
+    );
+
     let renderedHtml = $derived(
-        message.type === "agent" || message.type === "user"
-            ? DOMPurify.sanitize(marked.parse(message.content) as string)
+        (message.type === "agent" || message.type === "user") && !isActiveStream
+            ? DOMPurify.sanitize(marked.parse(stripThinking(message.content)) as string)
             : "",
     );
 
@@ -101,7 +112,11 @@
                 </span>
             </div>
             <div class="agent-content">
-                <div class="markdown-content">{@html renderedHtml}</div>
+                {#if isActiveStream}
+                    <div class="markdown-content stream-plain">{stripThinking(message.content)}</div>
+                {:else}
+                    <div class="markdown-content">{@html renderedHtml}</div>
+                {/if}
             </div>
             <div class="agent-actions" class:visible={message.rating != null}>
                 <button class="action-btn" onclick={copyContent} title="Copier">
@@ -273,6 +288,10 @@
         font-size: 0.875rem;
         line-height: 1.55;
         color: var(--text-primary);
+    }
+    .stream-plain {
+        white-space: pre-wrap;
+        word-break: break-word;
     }
     .agent-actions {
         margin-top: 0.3rem;

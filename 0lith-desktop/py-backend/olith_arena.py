@@ -23,13 +23,9 @@ from pathlib import Path
 
 from olith_ollama import chat_with_ollama, chat_docker_pyrolith
 from olith_shared import strip_think_blocks, log_info, log_warn
+from config import PYROLITH_URL, PYROLITH_MODEL, CRYOLITH_MODEL, FALLBACK_MODEL
 
 # ── Constants ──────────────────────────────────────────────────────────────
-
-PYROLITH_URL = "http://localhost:11435"
-PYROLITH_MODEL = "deephat/DeepHat-V1-7B:latest"  # Docker :11435
-CRYOLITH_MODEL = "hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF:latest"
-FALLBACK_MODEL = "qwen3:14b"
 
 # Arena-quality override: use Qwen3:14b when specialized models produce garbage output
 # Set env vars ARENA_RED_MODEL / ARENA_BLUE_MODEL to override

@@ -12,19 +12,27 @@
     }
 
     let scrollContainer: HTMLDivElement;
+    let userScrolledUp = false;
 
-    // Auto-scroll when messages change
+    function onScroll() {
+        userScrolledUp =
+            scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight > 80;
+    }
+
+    // Auto-scroll when messages change, unless user has scrolled up
     $effect(() => {
         const msgs = chat.getMessages();
         if (msgs.length > 0 && scrollContainer) {
             tick().then(() => {
-                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                if (!userScrolledUp) {
+                    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                }
             });
         }
     });
 </script>
 
-<div class="chat-area" bind:this={scrollContainer}>
+<div class="chat-area" bind:this={scrollContainer} onscroll={onScroll}>
     {#if chat.getMessages().length === 0}
         <div class="empty">
             <OLithEye

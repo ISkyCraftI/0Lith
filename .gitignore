@@ -51,8 +51,8 @@ nul
 *.sw?
 
 # ===== Qdrant (embedded runtime data) =====
-# Keep meta.json (collection schema) but ignore live storage
-0lith-desktop/py-backend/qdrant_data/collection/
+# Data dir moved to ~/.0lith/qdrant — ignore old in-repo location entirely
+0lith-desktop/py-backend/qdrant_data/
 
 # ===== 0Lith runtime output =====
 # Arena logs and DPO export written by olith_purple.py at runtime
@@ -85,3 +85,7 @@ nul
 *.pem
 secrets.json
 files/
+
+# ===== Tool artifacts / stray files =====
+repomix-output.xml
+launch.md

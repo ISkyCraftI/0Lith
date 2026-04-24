@@ -29,6 +29,7 @@
 
     let activeTab = $state<"chat" | "arena" | "purple">("chat");
     let statusInterval: ReturnType<typeof setInterval> | undefined;
+    let unlistenTray: (() => void) | undefined;
     let ollamaOk = $state(false);
     let qdrantOk = $state(false);
     let loadedModels = $state<LoadedModel[]>([]);
@@ -141,7 +142,7 @@
 
     onMount(async () => {
         // Listen for tray gaming mode toggle
-        listen("tray-gaming-toggle", () => {
+        unlistenTray = await listen("tray-gaming-toggle", () => {
             handleToggleGaming();
         });
 
@@ -202,6 +203,7 @@
 
     onDestroy(() => {
         if (statusInterval !== undefined) clearInterval(statusInterval);
+        unlistenTray?.();
     });
 </script>
 

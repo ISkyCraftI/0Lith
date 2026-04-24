@@ -35,6 +35,7 @@ from typing import Any, AsyncIterator, Callable
 
 from .cyber_range import CyberRange, ExecResult
 from .scenario_generator import ScenarioConfig
+from config import OLLAMA_URL, PYROLITH_URL, PYROLITH_MODEL, CRYOLITH_MODEL, FALLBACK_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -286,10 +287,10 @@ class MatchProtocol:
         # Direct Ollama model config (overrides callables when provided)
         red_model: str | None = None,
         blue_model: str | None = None,
-        red_url: str = "http://localhost:11435",
-        blue_url: str = "http://localhost:11434",
-        fallback_model: str = "qwen3:14b",
-        fallback_url: str = "http://localhost:11434",
+        red_url: str = PYROLITH_URL,
+        blue_url: str = OLLAMA_URL,
+        fallback_model: str = FALLBACK_MODEL,
+        fallback_url: str = OLLAMA_URL,
     ) -> None:
         """Initialise le protocole de match.
 

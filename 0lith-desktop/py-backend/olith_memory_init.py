@@ -26,19 +26,24 @@ from datetime import datetime
 # CONFIGURATION
 # ============================================================================
 
-OLLAMA_URL = "http://localhost:11434"
-# Embedded Qdrant — path resolved relative to this script (no Docker required)
-QDRANT_DATA_PATH: Path = Path(__file__).parent / "qdrant_data"
-# Legacy Docker URL — kept for backward compat in callers that import QDRANT_URL
+from config import (
+    OLLAMA_URL, PYROLITH_URL,
+    HODOLITH_MODEL, MONOLITH_MODEL, AEROLITH_MODEL,
+    CRYOLITH_MODEL, PYROLITH_MODEL, EMBED_MODEL,
+    DATA_DIR,
+)
+
+# Embedded Qdrant — all runtime state lives under DATA_DIR (~/.0lith)
+QDRANT_DATA_PATH: Path = Path(DATA_DIR) / "qdrant"
+# Legacy Docker URL — kept for callers that import QDRANT_URL
 QDRANT_URL = "http://localhost:6333"
-PYROLITH_URL = "http://localhost:11435"  # Docker DeepHat
 
 # Mem0 config — Qwen3-Embedding + Qdrant + Kuzu
 MEM0_CONFIG = {
     "llm": {
         "provider": "ollama",
         "config": {
-            "model": "qwen3:1.7b",             # Hodolith — extraction rapide
+            "model": HODOLITH_MODEL,            # Hodolith — extraction rapide
             "ollama_base_url": OLLAMA_URL,
             "temperature": 0.1,                 # Déterministe pour extraction mémoire
         }
@@ -46,7 +51,7 @@ MEM0_CONFIG = {
     "embedder": {
         "provider": "ollama",
         "config": {
-            "model": "qwen3-embedding:0.6b",    # #1 mondial MTEB, code-aware
+            "model": EMBED_MODEL,               # #1 mondial MTEB, code-aware
             "ollama_base_url": OLLAMA_URL,
         }
     },
@@ -75,7 +80,7 @@ MEM0_CONFIG = {
 
 AGENTS = {
     "hodolith": {
-        "model": "qwen3:1.7b",
+        "model": HODOLITH_MODEL,
         "role": "Dispatcher",
         "color": "🟡",
         "description": (
@@ -96,7 +101,7 @@ AGENTS = {
     },
 
     "monolith": {
-        "model": "qwen3:14b",
+        "model": MONOLITH_MODEL,
         "role": "Orchestrateur",
         "color": "⬛",
         "description": (
@@ -120,7 +125,7 @@ AGENTS = {
     },
 
     "aerolith": {
-        "model": "qwen3-coder:30b",
+        "model": AEROLITH_MODEL,
         "role": "Codeur",
         "color": "⚪",
         "description": (
@@ -144,7 +149,7 @@ AGENTS = {
     },
 
     "cryolith": {
-        "model": "hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF:latest",
+        "model": CRYOLITH_MODEL,
         "role": "Analyste Défensif (Blue Team)",
         "color": "🔵",
         "description": (
@@ -169,7 +174,7 @@ AGENTS = {
     },
 
     "pyrolith": {
-        "model": "deephat/DeepHat-V1-7B:latest",
+        "model": PYROLITH_MODEL,
         "role": "Agent Offensif (Red Team)",
         "color": "🔴",
         "description": (

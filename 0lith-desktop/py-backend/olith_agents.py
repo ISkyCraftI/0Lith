@@ -17,7 +17,8 @@ from olith_shared import (
     strip_think_blocks, log_warn, log_info,
     extract_memories, memory_text,
 )
-from olith_memory_init import AGENTS, OLLAMA_URL, QDRANT_URL, check_service
+from olith_memory_init import AGENTS, QDRANT_URL, check_service
+from config import OLLAMA_URL
 from olith_ollama import (
     chat_with_ollama, chat_with_ollama_stream,
     chat_docker_pyrolith, chat_docker_pyrolith_stream,

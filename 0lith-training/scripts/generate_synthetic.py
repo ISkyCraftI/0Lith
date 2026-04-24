@@ -175,7 +175,7 @@ def check_budget(
             f"  ⚠  AVERTISSEMENT : {cost_eur:.2f}€ estimé — limite {COST_REFUSE_EUR}€ ignorée via --force-expensive."
         )
 
-    if cost_eur > COST_WARN_EUR:
+    if cost_eur > COST_WARN_EUR and not force_expensive:
         print(f"\n  ⚠  Coût estimé : {cost_eur:.2f}€ (> seuil {COST_WARN_EUR}€)")
         try:
             answer = input(f"  Continuer ? [y/N] ").strip().lower()
@@ -190,7 +190,7 @@ def check_budget(
 REFUSAL_PHRASES = [
     "i cannot", "i can't", "i'm not able", "i am not able",
     "i'm unable", "i am unable", "i won't", "i will not",
-    "je ne peux pas", "je ne peux pas", "je suis incapable",
+    "je ne peux pas", "je suis incapable",
     "it would be unethical", "this is unethical", "harmful content",
     "as an ai", "as a language model", "i apologize",
     "je m'excuse", "ce n'est pas approprié",
@@ -420,6 +420,8 @@ class OpenAIBackend(TeacherBackend):
         with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read())
 
+        if "choices" not in data or not data["choices"]:
+            raise ValueError(f"API error body: {data.get('error', data)}")
         content    = data["choices"][0]["message"]["content"]
         usage      = data.get("usage", {})
         tokens_in  = usage.get("prompt_tokens", 0)
@@ -478,6 +480,8 @@ class AnthropicBackend(TeacherBackend):
         with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read())
 
+        if not data.get("content"):
+            raise ValueError(f"API error body: {data.get('error', data)}")
         content    = data["content"][0]["text"]
         usage      = data.get("usage", {})
         tokens_in  = usage.get("input_tokens", 0)

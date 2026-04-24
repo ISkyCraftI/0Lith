@@ -47,7 +47,7 @@ import signal
 import sys
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -285,6 +285,25 @@ def load_jsonl_files(paths: list[Path]) -> "Any":
             "  Chaque ligne doit avoir une clé 'messages' au format ChatML.\n"
             "  Vérifier avec : python scripts/normalize_dataset.py --dry-run"
         )
+
+    _golden = BASE_DIR / "evals" / "golden_test_set.jsonl"
+    if _golden.exists():
+        golden_ids: set[str] = set()
+        with _golden.open(encoding="utf-8") as _fh:
+            for _line in _fh:
+                _line = _line.strip()
+                if not _line:
+                    continue
+                try:
+                    golden_ids.add(json.loads(_line).get("id", ""))
+                except json.JSONDecodeError:
+                    pass
+        leaked = [r.get("id") for r in all_rows if r.get("id") in golden_ids]
+        if leaked:
+            _die(
+                f"Golden test set contamination: {len(leaked)} training examples match golden IDs.\n"
+                "  Remove evals/golden_test_set.jsonl from training data paths."
+            )
 
     return Dataset.from_list(all_rows)
 
@@ -571,7 +590,7 @@ def _die(msg: str) -> None:
 
 
 def _resolve_output_dir(cfg: Config, run_name: str) -> Path:
-    """Résout le dossier de sortie : config output_dir / run_name."""
+    """Résout le dossier de sortie : models/checkpoints/{run_name}."""
     base = Path(cfg.training.output_dir)
     if not base.is_absolute():
         base = BASE_DIR / base
@@ -670,7 +689,7 @@ def main() -> None:
     print(f"  LR              : {tc.learning_rate:.1e}  |  Scheduler : {tc.lr_scheduler_type}")
 
     # ── Nom du run
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     if args.run_name:
         run_name = args.run_name
     else:

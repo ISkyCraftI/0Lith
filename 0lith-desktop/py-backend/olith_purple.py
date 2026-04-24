@@ -70,13 +70,11 @@ SPARRING_KEY_PATH   = Path.home() / ".0lith" / "sparring.key"
 SPARRING_SECRET_ENV = "OLITH_SPARRING_SECRET"
 MATCH_TIMEOUT_S     = 3600  # 60 minutes
 
-# Ollama endpoints
-PYROLITH_URL   = os.environ.get("PYROLITH_URL",        "http://localhost:11435")
-CRYOLITH_URL   = os.environ.get("CRYOLITH_URL",        "http://localhost:11434")
-PYROLITH_MODEL = os.environ.get("PURPLE_RED_MODEL",    "deephat/DeepHat-V1-7B:latest")
-CRYOLITH_MODEL = os.environ.get("PURPLE_BLUE_MODEL",
-                                "hf.co/fdtn-ai/Foundation-Sec-8B-Q4_K_M-GGUF:latest")
-FALLBACK_MODEL = "qwen3:14b"
+from config import (
+    OLLAMA_URL, PYROLITH_URL,
+    PYROLITH_MODEL, CRYOLITH_MODEL, FALLBACK_MODEL,
+)
+CRYOLITH_URL = OLLAMA_URL  # Blue team uses local Ollama, same as OLLAMA_URL
 
 # Dev flags — bypass safety checks without touching production code
 SKIP_GVISOR = os.environ.get("PURPLE_SKIP_GVISOR", "0") == "1"
