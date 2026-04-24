@@ -24,6 +24,7 @@ from pathlib import Path
 from olith_ollama import chat_with_ollama, chat_docker_pyrolith
 from olith_shared import strip_think_blocks, log_info, log_warn
 from config import PYROLITH_URL, PYROLITH_MODEL, CRYOLITH_MODEL, FALLBACK_MODEL
+from shared.streaming_relay import get_model_timeout, sync_call_with_fallback
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
@@ -102,22 +103,9 @@ def _pyrolith_available() -> bool:
         return False
 
 
-def _get_timeout(model: str) -> int:
-    """Return appropriate timeout in seconds for a given model."""
-    if "DeepHat" in model or "deephat" in model.lower():
-        return 300   # regularly takes 125s+
-    if "Foundation-Sec" in model or "fdtn-ai" in model:
-        return 300   # regularly takes 120-220s
-    if "qwen3:14b" in model:
-        return 180
-    if "qwen3" in model:
-        return 120
-    return 240  # safe fallback for unknown models
-
-
 def _raw_call(messages: list[dict], model: str, is_docker: bool = False) -> str:
     """Low-level LLM call with adaptive timeout. num_ctx=2048 kept small — arena prompts are short."""
-    timeout = _get_timeout(model)
+    timeout = get_model_timeout(model)
     if is_docker:
         return chat_docker_pyrolith(model, messages, timeout=timeout, num_ctx=2048)
     return chat_with_ollama(model, messages, timeout=timeout, num_ctx=2048)
@@ -125,12 +113,7 @@ def _raw_call(messages: list[dict], model: str, is_docker: bool = False) -> str:
 
 def _llm_call_with_fallback(messages: list[dict], model: str, is_docker: bool = False) -> str:
     """LLM call with automatic fallback to qwen3:14b if response too short (< 20 chars)."""
-    raw = _raw_call(messages, model, is_docker)
-    stripped = strip_think_blocks(raw).strip()
-    if len(stripped) < 20 and model != FALLBACK_MODEL:
-        log_warn("arena", f"Réponse trop courte ({len(stripped)} chars) depuis {model}, fallback qwen3:14b")
-        raw = _raw_call(messages, FALLBACK_MODEL, is_docker=False)
-    return raw
+    return sync_call_with_fallback(messages, model, is_docker=is_docker, num_ctx=2048)
 
 
 def _call_pyrolith(messages: list[dict]) -> str:

@@ -74,6 +74,7 @@ from config import (
     OLLAMA_URL, PYROLITH_URL,
     PYROLITH_MODEL, CRYOLITH_MODEL, FALLBACK_MODEL,
 )
+from shared.streaming_relay import get_model_timeout
 CRYOLITH_URL = OLLAMA_URL  # Blue team uses local Ollama, same as OLLAMA_URL
 
 # Dev flags — bypass safety checks without touching production code
@@ -156,12 +157,12 @@ async def _call_with_fallback(
 
 async def call_pyrolith(prompt: str) -> str:
     """Callable async Red Team (Pyrolith → DeepHat)."""
-    return await _call_with_fallback(PYROLITH_URL, PYROLITH_MODEL, prompt, timeout=300)
+    return await _call_with_fallback(PYROLITH_URL, PYROLITH_MODEL, prompt, timeout=get_model_timeout(PYROLITH_MODEL))
 
 
 async def call_cryolith(prompt: str) -> str:
     """Callable async Blue Team (Cryolith → Foundation-Sec)."""
-    return await _call_with_fallback(CRYOLITH_URL, CRYOLITH_MODEL, prompt, timeout=300)
+    return await _call_with_fallback(CRYOLITH_URL, CRYOLITH_MODEL, prompt, timeout=get_model_timeout(CRYOLITH_MODEL))
 
 
 # ---------------------------------------------------------------------------
